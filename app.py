@@ -22,8 +22,29 @@ st.write("เครื่องมือนี้ช่วยพยากรณ�
 try:
     df = pd.read_csv('https://docs.google.com/spreadsheets/d/18zRQXwQA9avuIXWaZ7p_jd9dDbTSe-soTMLpmH3_8w4/export?format=csv')
     df['end_date'] = pd.to_datetime(df['end_date'], format='%d/%m/%Y')
+    
+    # ตรวจสอบคุณภาพข้อมูล
     st.subheader("ข้อมูลผู้ป่วยย้อนหลัง")
+    
+    # แสดงข้อมูลพื้นฐาน
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("จำนวนสัปดาห์", len(df))
+    with col2:
+        st.metric("ช่วงเวลา", f"{df['week_num'].min()}-{df['week_num'].max()}")
+    with col3:
+        st.metric("ผู้ป่วยเฉลี่ย", f"{df['cases'].mean():.1f} ราย")
+    
     st.dataframe(df)
+    
+    # เตือนถ้าข้อมูลน้อย
+    if len(df) < 8:
+        st.warning("⚠️ ข้อมูลมีน้อยกว่า 8 สัปดาห์ - การพยากรณ์อาจไม่แม่นยำ")
+    
+    # เตือนถ้ามีค่าผิดปกติ
+    if df['cases'].max() > df['cases'].mean() * 3:
+        st.warning("⚠️ พบค่าผิดปกติในข้อมูล - อาจส่งผลต่อการพยากรณ์")
+        
 except Exception as e:
     st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล: {e}")
     st.stop()
@@ -93,12 +114,19 @@ model, val_mae, val_mape, has_validation = train_and_validate_prophet_model(prop
 # --- 5. ส่วนสำหรับผู้ใช้ป้อนข้อมูลและพยากรณ์ ---
 st.header("พยากรณ์จำนวนผู้ป่วย")
 
+# จำกัดจำนวนสัปดาห์การพยากรณ์ให้สมเหตุสมผล
+max_forecast_weeks = min(12, len(df) // 2)  # ไม่เกิน 12 สัปดาห์ หรือ 50% ของข้อมูลเดิม
+
 weeks_to_forecast = st.slider(
     "เลือกจำนวนสัปดาห์ที่ต้องการพยากรณ์ไปข้างหน้า:",
     min_value=1,
-    max_value=12,
-    value=4
+    max_value=max_forecast_weeks,
+    value=min(4, max_forecast_weeks),
+    help=f"แนะนำไม่เกิน {max_forecast_weeks} สัปดาห์เพื่อความแม่นยำ"
 )
+
+if weeks_to_forecast > len(df) // 4:
+    st.warning(f"⚠️ การพยากรณ์ {weeks_to_forecast} สัปดาห์ อาจไม่แม่นยำเนื่องจากข้อมูลจำกัด")
 
 # สร้างช่วงวันที่สำหรับการพยากรณ์
 future = model.make_future_dataframe(periods=weeks_to_forecast, freq='W')
@@ -113,8 +141,25 @@ forecast_future = forecast_future.copy()
 forecast_future['week_num'] = range(last_week_num + 1, last_week_num + weeks_to_forecast + 1)
 
 # เพิ่มการเปรียบเทียบกับ Simple Baseline (ค่าเฉลี่ย 4 สัปดาห์ล่าสุด)
-recent_avg = df['cases'].tail(4).mean()
+recent_avg = df['cases'].tail(min(4, len(df))).mean()
 baseline_forecast = [recent_avg] * weeks_to_forecast
+
+# ตรวจสอบความสมเหตุสมผลของการพยากรณ์
+forecast_mean = forecast_future['yhat'].mean()
+historical_mean = df['cases'].mean()
+forecast_ratio = forecast_mean / historical_mean if historical_mean > 0 else float('inf')
+
+# เตือนถ้าการพยากรณ์ผิดปกติ
+if forecast_ratio > 3 or forecast_ratio < 0.3:
+    st.warning(f"⚠️ การพยากรณ์อาจไม่สมเหตุสมผล (เปลี่ยนแปลง {forecast_ratio:.1f} เท่าจากค่าเฉลี่ยเดิม)")
+
+# จำกัดค่าพยากรณ์ให้อยู่ในช่วงที่สมเหตุสมผล
+min_reasonable = max(0, historical_mean * 0.1)  # ไม่ต่ำกว่า 10% ของค่าเฉลี่ย
+max_reasonable = historical_mean * 5  # ไม่เกิน 5 เท่าของค่าเฉลี่ย
+
+forecast_future['yhat_adjusted'] = forecast_future['yhat'].clip(min_reasonable, max_reasonable)
+forecast_future['yhat_upper_adjusted'] = forecast_future['yhat_upper'].clip(min_reasonable, max_reasonable)
+forecast_future['yhat_lower_adjusted'] = forecast_future['yhat_lower'].clip(0, max_reasonable)
 
 # --- 6. แสดงผลลัพธ์การพยากรณ์ ---
 st.subheader("ผลการพยากรณ์")
@@ -130,63 +175,83 @@ if has_validation:
 forecast_display = pd.DataFrame({
     'สัปดาห์ที่': forecast_future['week_num'].astype(int),
     'วันที่': forecast_future['ds'].dt.strftime('%d/%m/%Y'),
-    'Prophet พยากรณ์ (ราย)': forecast_future['yhat'].round(0).astype(int),
+    'Prophet พยากรณ์ (ราย)': forecast_future['yhat_adjusted'].round(0).astype(int),
     'Baseline เฉลี่ย (ราย)': [int(recent_avg)] * weeks_to_forecast,
-    'ต่างจาก Baseline': (forecast_future['yhat'] - recent_avg).round(0).astype(int),
-    'ช่วงต่ำ (95% CI)': forecast_future['yhat_lower'].round(0).astype(int),
-    'ช่วงสูง (95% CI)': forecast_future['yhat_upper'].round(0).astype(int)
+    'ต่างจาก Baseline': (forecast_future['yhat_adjusted'] - recent_avg).round(0).astype(int),
+    'ช่วงต่ำ (95% CI)': forecast_future['yhat_lower_adjusted'].round(0).astype(int),
+    'ช่วงสูง (95% CI)': forecast_future['yhat_upper_adjusted'].round(0).astype(int)
 })
 st.dataframe(forecast_display)
 
 # เตือนหากค่าพยากรณ์แตกต่างจาก baseline มากเกินไป
-max_diff_percent = abs((forecast_future['yhat'] - recent_avg) / recent_avg * 100).max()
+max_diff_percent = abs((forecast_future['yhat_adjusted'] - recent_avg) / recent_avg * 100).max()
 if max_diff_percent > 50:
     st.warning(f"⚠️ การพยากรณ์แตกต่างจาก baseline มากถึง {max_diff_percent:.1f}% - ควรตรวจสอบความสมเหตุสมผล")
+elif max_diff_percent < 5:
+    st.info(f"ℹ️ การพยากรณ์ใกล้เคียง baseline ({max_diff_percent:.1f}%) - โมเดลอาจไม่ได้เพิ่มคุณค่ามากนัก")
 
 # --- 7. แสดงกราฟแนวโน้มและการพยากรณ์ด้วย Plotly ---
 st.subheader("กราฟแนวโน้มและการพยากรณ์")
 
+# ใช้ week_num แทน date สำหรับ x-axis เพื่อให้เข้าใจง่าย
 fig = go.Figure()
 
-# เพิ่มข้อมูลจริง
+# เพิ่มข้อมูลจริง (ใช้ week_num)
 fig.add_trace(go.Scatter(
-    x=df['end_date'],
+    x=df['week_num'],
     y=df['cases'],
     mode='lines+markers',
     name='ข้อมูลจริง',
     line=dict(color='blue', width=2),
-    marker=dict(size=6)
+    marker=dict(size=8),
+    hovertemplate='สัปดาห์ที่: %{x}<br>ผู้ป่วย: %{y} ราย<extra></extra>'
 ))
 
-# เพิ่มการพยากรณ์
+# เพิ่มการพยากรณ์ (ใช้ week_num ที่ต่อเนื่อง)
+forecast_weeks = range(df['week_num'].max() + 1, df['week_num'].max() + weeks_to_forecast + 1)
 fig.add_trace(go.Scatter(
-    x=forecast_future['ds'],
-    y=forecast_future['yhat'],
+    x=list(forecast_weeks),
+    y=forecast_future['yhat_adjusted'],
     mode='lines+markers',
-    name='พยากรณ์',
+    name='Prophet พยากรณ์',
     line=dict(color='red', width=2),
-    marker=dict(size=8, symbol='diamond')
+    marker=dict(size=8, symbol='diamond'),
+    hovertemplate='สัปดาห์ที่: %{x}<br>พยากรณ์: %{y:.0f} ราย<extra></extra>'
 ))
 
 # เพิ่ม Confidence Interval
 fig.add_trace(go.Scatter(
-    x=pd.concat([forecast_future['ds'], forecast_future['ds'][::-1]]),
-    y=pd.concat([forecast_future['yhat_upper'], forecast_future['yhat_lower'][::-1]]),
+    x=list(forecast_weeks) + list(forecast_weeks)[::-1],
+    y=list(forecast_future['yhat_upper_adjusted']) + list(forecast_future['yhat_lower_adjusted'][::-1]),
     fill='toself',
     fillcolor='rgba(255,0,0,0.2)',
     line=dict(color='rgba(255,255,255,0)'),
     name='ช่วงความเชื่อมั่น 95%',
-    showlegend=True
+    showlegend=True,
+    hoverinfo='skip'
 ))
 
 # เพิ่มการพยากรณ์ baseline ในกราฟ
 fig.add_trace(go.Scatter(
-    x=[df['week_num'].max() + i for i in range(1, weeks_to_forecast + 1)],
+    x=list(forecast_weeks),
     y=baseline_forecast,
     mode='lines+markers',
     name='Baseline (เฉลี่ย 4 สัปดาห์)',
     line=dict(color='orange', width=2, dash='dot'),
-    marker=dict(size=6, symbol='square')
+    marker=dict(size=6, symbol='square'),
+    hovertemplate='สัปดาห์ที่: %{x}<br>Baseline: %{y:.0f} ราย<extra></extra>'
+))
+
+# เพิ่มเส้นแนวโน้มในอดีต
+historical_trend = forecast[:len(df)]['yhat']
+fig.add_trace(go.Scatter(
+    x=df['week_num'],
+    y=historical_trend,
+    mode='lines',
+    name='แนวโน้ม (Prophet)',
+    line=dict(color='green', dash='dash', width=1),
+    opacity=0.7,
+    hovertemplate='สัปดาห์ที่: %{x}<br>แนวโน้ม: %{y:.0f} ราย<extra></extra>'
 ))
 
 # ตั้งค่ากราฟ
@@ -196,7 +261,7 @@ fig.update_layout(
         'x': 0.5,
         'xanchor': 'center'
     },
-    xaxis_title='วันที่',
+    xaxis_title='สัปดาห์ที่',
     yaxis_title='จำนวนผู้ป่วย (ราย)',
     hovermode='x unified',
     showlegend=True,
@@ -205,9 +270,26 @@ fig.update_layout(
     plot_bgcolor='white'
 )
 
-# เพิ่ม grid
-fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+# ตั้งค่าช่วงแกน X ให้สมเหตุสมผล
+x_min = max(1, df['week_num'].min() - 1)
+x_max = df['week_num'].max() + weeks_to_forecast + 1
+fig.update_xaxes(
+    range=[x_min, x_max],
+    showgrid=True, 
+    gridwidth=1, 
+    gridcolor='lightgray',
+    dtick=1  # แสดงทุกสัปดาห์
+)
+
+# ตั้งค่าช่วงแกน Y ให้สมเหตุสมผล
+y_min = 0
+y_max = max(df['cases'].max(), forecast_future['yhat_upper'].max()) * 1.1
+fig.update_yaxes(
+    range=[y_min, y_max],
+    showgrid=True, 
+    gridwidth=1, 
+    gridcolor='lightgray'
+)
 
 # แสดงกราฟใน Streamlit
 st.plotly_chart(fig, use_container_width=True)
@@ -337,11 +419,11 @@ with col2:
     forecast_stats_df = pd.DataFrame({
         'สถิติ': ['ค่าเฉลี่ย', 'ค่ามัธยฐาน', 'ส่วนเบียงเบนมาตรฐาน', 'ค่าต่ำสุด', 'ค่าสูงสุด'],
         'ค่า': [
-            f"{forecast_future['yhat'].mean():.1f} ราย",
-            f"{forecast_future['yhat'].median():.1f} ราย",
-            f"{forecast_future['yhat'].std():.1f} ราย", 
-            f"{forecast_future['yhat'].min():.0f} ราย",
-            f"{forecast_future['yhat'].max():.0f} ราย"
+            f"{forecast_future['yhat_adjusted'].mean():.1f} ราย",
+            f"{forecast_future['yhat_adjusted'].median():.1f} ราย",
+            f"{forecast_future['yhat_adjusted'].std():.1f} ราย", 
+            f"{forecast_future['yhat_adjusted'].min():.0f} ราย",
+            f"{forecast_future['yhat_adjusted'].max():.0f} ราย"
         ]
     })
     st.dataframe(forecast_stats_df, hide_index=True)
@@ -352,7 +434,7 @@ st.subheader("📊 การวิเคราะห์แนวโน้ม")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    avg_forecast = forecast_future['yhat'].mean()
+    avg_forecast = forecast_future['yhat_adjusted'].mean()
     avg_historical = df['cases'].mean()
     trend_change = ((avg_forecast - avg_historical) / avg_historical) * 100
     
@@ -363,8 +445,8 @@ with col1:
     )
 
 with col2:
-    first_forecast = forecast_future['yhat'].iloc[0] 
-    last_forecast = forecast_future['yhat'].iloc[-1]
+    first_forecast = forecast_future['yhat_adjusted'].iloc[0] 
+    last_forecast = forecast_future['yhat_adjusted'].iloc[-1]
     forecast_trend = last_forecast - first_forecast
     
     st.metric(
@@ -374,7 +456,7 @@ with col2:
     )
 
 with col3:
-    uncertainty = forecast_future['yhat_upper'].mean() - forecast_future['yhat_lower'].mean()
+    uncertainty = forecast_future['yhat_upper_adjusted'].mean() - forecast_future['yhat_lower_adjusted'].mean()
     st.metric(
         label="ช่วงความไม่แน่นอนเฉลี่ย",
         value=f"±{uncertainty/2:.1f} ราย",
