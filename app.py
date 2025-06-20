@@ -85,46 +85,34 @@ combined_df = pd.concat([plot_data, trend_line_data], ignore_index=True)
 
 # สร้างกราฟด้วย Plotly Express
 # ใช้ color เพื่อแยกประเภทข้อมูล (ข้อมูลจริง, พยากรณ์, เส้นแนวโน้ม)
+# สร้างกราฟด้วย Plotly Express
 fig = px.line(
     combined_df,
     x='สัปดาห์ที่',
     y='จำนวนผู้ป่วย (ราย)',
-    color='ประเภทข้อมูล', # ใช้คอลัมน์นี้ในการแยกสีและสร้าง legend
+    color='ประเภทข้อมูล',
     title='แนวโน้มผู้ป่วยไข้หวัดใหญ่และการพยากรณ์',
     labels={
         'สัปดาห์ที่': 'สัปดาห์ที่',
         'จำนวนผู้ป่วย (ราย)': 'จำนวนผู้ป่วย (ราย)',
-        'ประเภทข้อมูล': 'Legend' # ชื่อที่จะแสดงใน legend
+        'ประเภทข้อมูล': 'Legend'
     },
-    line_dash='ประเภทข้อมูล', # ใช้ dash style เพื่อแยก
-    markers=True # แสดง marker
+    line_dash='ประเภทข้อมูล',
+    markers=True
 )
 
-# ปรับแต่งสีและสไตล์ของเส้น (Plotly จะกำหนดสีอัตโนมัติ แต่เราสามารถปรับได้)
-# ตั้งค่าสีและ marker แบบกำหนดเองถ้าต้องการละเอียดขึ้น
-fig.update_traces(
-    selector=dict(name='ข้อมูลจริง'),
-    line=dict(color='blue', dash='solid'),
-    marker=dict(symbol='circle')
-)
-fig.update_traces(
-    selector=dict(name='เส้นแนวโน้ม'),
-    line=dict(color='green', dash='dash'), # dashed line
-    marker=dict(symbol='line-ns-open') # ไม่มี marker สำหรับเส้นแนวโน้ม หรือเลือกที่เหมาะสม
-)
-fig.update_traces(
-    selector=dict(name='พยากรณ์'),
-    line=dict(color='red', dash='dot'), # dotted line
-    marker=dict(symbol='x')
-)
+# ... (โค้ด update_traces) ...
 
-# ปรับแต่ง layout (ตัวอักษร, title, legend)
+# **ส่วนสำคัญ: ปรับแต่ง layout และ Font สำหรับ Plotly**
 fig.update_layout(
-    font_family="Kanit, Noto Sans Thai, sans-serif", # ลองใส่ Kanit ก่อน แต่ Plotly มักจะใช้ Font ระบบอยู่แล้ว
-    title_font_size=20,
-    xaxis_title_font_size=16,
-    yaxis_title_font_size=16,
-    legend_title_text='ประเภทข้อมูล'
+    # ลองใช้ Noto Sans Thai เป็นตัวแรกและตัวเดียวไปก่อน เพื่อตัดตัวแปร
+    font_family="Noto Sans Thai, sans-serif",
+    # เพิ่มการกำหนด font สำหรับ title, axis titles, legend titles โดยเฉพาะ
+    title_font=dict(family="Noto Sans Thai, sans-serif", size=20),
+    xaxis_title_font=dict(family="Noto Sans Thai, sans-serif", size=16),
+    yaxis_title_font=dict(family="Noto Sans Thai, sans-serif", size=16),
+    legend_title_font=dict(family="Noto Sans Thai, sans-serif", size=12), # เพิ่มสำหรับ legend title
+    legend_font=dict(family="Noto Sans Thai, sans-serif", size=10) # เพิ่มสำหรับ legend item text
 )
 
 
