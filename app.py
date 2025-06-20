@@ -7,22 +7,10 @@ import numpy as np
 # --- เพิ่มโค้ดส่วนนี้เพื่อตั้งค่า Font สำหรับภาษาไทย ---
 import matplotlib.font_manager as fm
 
-# ตรวจสอบว่ามี Font ภาษาไทยที่คุณต้องการใช้หรือไม่
 # (เปลี่ยน 'TH Sarabun New' เป็นชื่อ Font ที่มีในเครื่องของคุณ ถ้าใช้ Windows)
 # (สำหรับ Mac อาจจะเป็น 'Thonburi' หรือ 'Ayuthaya')
 # (สำหรับ Linux อาจจะเป็น 'Noto Sans Thai' หรือ 'Liberation Sans')
-thai_font_name = 'Kanit' # ลองเปลี่ยนชื่อ Font ถ้ายังไม่แสดงผล
-# ถ้าไม่แน่ใจว่ามี Font อะไรบ้าง ลองรันโค้ดด้านล่างในเซลล์ Jupyter แยกต่างหาก
-# for font in fm.findSystemFonts(fontpaths=None, fontext='ttf'):
-#     try:
-#         fprop = fm.FontProperties(fname=font)
-#         if fprop.get_name() == thai_font_name:
-#             print(f"Found {thai_font_name} at: {font}")
-#             break
-#     except:
-#         pass
-# else:
-#     st.warning(f"ไม่พบ Font '{thai_font_name}' ในระบบ อาจต้องติดตั้ง Font หรือใช้ Font อื่น")
+thai_font_name = 'Noto Sans Thai' # ลองเปลี่ยนชื่อ Font ถ้ายังไม่แสดงผล
 
 plt.rcParams['font.family'] = thai_font_name # กำหนด Font หลัก
 plt.rcParams['axes.unicode_minus'] = False # แก้ไขเครื่องหมายลบภาษาไทย
