@@ -3,10 +3,20 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.font_manager as fm
+import matplotlib.font_manager as fm # ต้อง import fm
 
-# --- เพิ่มโค้ดส่วนนี้เพื่อตรวจสอบ Font ที่มีอยู่ ---
-# (จะแสดงใน Streamlit logs หรือในหน้าเว็บ ถ้าคุณ st.write ออกมา)
+# --- เพิ่มโค้ดส่วนนี้ ---
+# บังคับให้ Matplotlib rebuild font cache
+# อาจช่วยแก้ปัญหา font ไม่แสดงผลหลังจาก deploy
+try:
+    fm._rebuild() # บังคับให้ rebuild
+    st.info("Matplotlib font cache rebuilt successfully.")
+except Exception as e:
+    st.warning(f"Failed to rebuild font cache: {e}")
+# --- สิ้นสุดโค้ดเพิ่ม ---
+
+
+# --- โค้ดตรวจสอบ Font และตั้งค่า Font ที่คุณมีอยู่แล้ว ---
 font_list = fm.findSystemFonts(fontpaths=None, fontext='ttf')
 available_fonts = []
 for font_path in font_list:
@@ -14,33 +24,31 @@ for font_path in font_list:
         prop = fm.FontProperties(fname=font_path)
         available_fonts.append(prop.get_name())
     except Exception as e:
-        # st.warning(f"Error loading font {font_path}: {e}") # อาจจะเยอะไป ถ้ามี error
         pass
 
-# สามารถพิมพ์ลงในหน้า Streamlit เพื่อดูได้ (ชั่วคราว)
-# st.subheader("Available Fonts on Server:")
-# st.write(sorted(list(set(available_fonts))))
+# ... (ส่วนที่ st.write(sorted(list(set(available_fonts)))) ถ้ายังต้องการ debug) ...
 
-# ตรวจสอบว่ามี Noto Sans Thai หรือไม่
+thai_font_name = 'sans-serif' # เริ่มต้นด้วย generic
 if 'Noto Sans Thai' in available_fonts:
-    st.success("พบ 'Noto Sans Thai' ในระบบ!")
     thai_font_name = 'Noto Sans Thai'
+    st.success("พบ 'Noto Sans Thai' ในระบบและจะใช้เป็น Font หลัก")
+elif 'Liberation Sans' in available_fonts:
+    thai_font_name = 'Liberation Sans'
+    st.warning("ไม่พบ 'Noto Sans Thai', ใช้ 'Liberation Sans' แทน")
+elif 'DejaVu Sans' in available_fonts:
+    thai_font_name = 'DejaVu Sans'
+    st.warning("ไม่พบ 'Noto Sans Thai', ใช้ 'DejaVu Sans' แทน")
 else:
-    # ลองใช้ Font อื่นที่มักจะมีใน Linux
-    if 'Liberation Sans' in available_fonts:
-        st.warning("ไม่พบ 'Noto Sans Thai', ใช้ 'Liberation Sans' แทน")
-        thai_font_name = 'Liberation Sans'
-    elif 'DejaVu Sans' in available_fonts:
-        st.warning("ไม่พบ 'Noto Sans Thai', ใช้ 'DejaVu Sans' แทน")
-        thai_font_name = 'DejaVu Sans'
-    else:
-        st.error("ไม่พบ Font ภาษาไทยที่เหมาะสม กรุณาตรวจสอบการติดตั้ง Font")
-        thai_font_name = 'sans-serif' # Fallback to generic sans-serif
+    st.error("ไม่พบ Font ภาษาไทยที่เหมาะสม, ใช้ Font generic 'sans-serif'")
 
 
 plt.rcParams['font.family'] = thai_font_name
-plt.rcParams['axes.unicode_minus'] = False
-# --- สิ้นสุดโค้ดตรวจสอบ Font ---
+# สำคัญ: เพิ่ม font fallback สำหรับ sans-serif
+# นี่จะบอก Matplotlib ให้ลองใช้ Font อื่นๆ ในกลุ่ม sans-serif ถ้า Font หลักไม่เจอ glyph
+plt.rcParams['font.sans-serif'] = [thai_font_name, 'Arial Unicode MS', 'DejaVu Sans', 'Liberation Sans', 'sans-serif']
+plt.rcParams['axes.unicode_minus'] = False # แก้ไขเครื่องหมายลบ
+# ... โค้ดส่วนที่เหลือของแอปของคุณ ...
+
 
 # --- 1. ตั้งค่าหน้าเว็บ ---
 st.set_page_config(
