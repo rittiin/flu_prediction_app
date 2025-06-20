@@ -12,42 +12,244 @@ warnings.filterwarnings('ignore')
 st.set_page_config(
     page_title="เว็บพยากรณ์โรคไข้หวัดใหญ่",
     page_icon="😷",
-    layout="centered"
+    layout="wide"
 )
 
 st.title("😷 เว็บพยากรณ์โรคไข้หวัดใหญ่เบื้องต้น")
 st.write("เครื่องมือนี้ช่วยพยากรณ์จำนวนผู้ป่วยไข้หวัดใหญ่ในสัปดาห์ข้างหน้า โดยใช้ Facebook Prophet")
 
-# --- 2. โหลดข้อมูล ---
-try:
-    df = pd.read_csv('https://docs.google.com/spreadsheets/d/18zRQXwQA9avuIXWaZ7p_jd9dDbTSe-soTMLpmH3_8w4/export?format=csv')
-    df['end_date'] = pd.to_datetime(df['end_date'], format='%d/%m/%Y')
+# --- 2. การเชื่อมต่อข้อมูลหลายรูปแบบ ---
+st.subheader("📊 เชื่อมต่อข้อมูล")
+
+# ใช้ session state เพื่อเก็บข้อมูล
+if 'current_data' not in st.session_state:
+    st.session_state.current_data = None
+if 'data_source' not in st.session_state:
+    st.session_state.data_source = "ตัวอย่าง"
+
+# เลือกวิธีการเชื่อมต่อข้อมูล
+data_source = st.radio(
+    "เลือกแหล่งข้อมูล:",
+    ["📊 Google Sheets (แนะนำ)", "📁 อัปโหลดไฟล์ CSV", "🎯 ข้อมูลตัวอย่าง"],
+    help="Google Sheets เหมาะสำหรับการแชร์และอัปเดตข้อมูลแบบ real-time"
+)
+
+# === วิธีที่ 1: Google Sheets ===
+if data_source == "📊 Google Sheets (แนะนำ)":
+    st.markdown("### 🌐 เชื่อมต่อ Google Sheets")
     
-    # ตรวจสอบคุณภาพข้อมูล
-    st.subheader("ข้อมูลผู้ป่วยย้อนหลัง")
-    
-    # แสดงข้อมูลพื้นฐาน
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("จำนวนสัปดาห์", len(df))
-    with col2:
-        st.metric("ช่วงเวลา", f"{df['week_num'].min()}-{df['week_num'].max()}")
-    with col3:
-        st.metric("ผู้ป่วยเฉลี่ย", f"{df['cases'].mean():.1f} ราย")
-    
-    st.dataframe(df)
-    
-    # เตือนถ้าข้อมูลน้อย
-    if len(df) < 8:
-        st.warning("⚠️ ข้อมูลมีน้อยกว่า 8 สัปดาห์ - การพยากรณ์อาจไม่แม่นยำ")
-    
-    # เตือนถ้ามีค่าผิดปกติ
-    if df['cases'].max() > df['cases'].mean() * 3:
-        st.warning("⚠️ พบค่าผิดปกติในข้อมูล - อาจส่งผลต่อการพยากรณ์")
+    # คำแนะนำการตั้งค่า Google Sheets
+    with st.expander("📋 วิธีตั้งค่า Google Sheets (คลิกเพื่อดู)"):
+        st.markdown("""
+        **ขั้นตอนที่ 1: เตรียม Google Sheets**
+        1. เปิด Google Sheets ใหม่: [sheets.google.com](https://sheets.google.com)
+        2. ใส่ข้อมูลตามรูปแบบ:
+           ```
+           A1: end_date    B1: cases    C1: week_num
+           A2: 10/01/2021  B2: 125      C2: 1
+           A3: 17/01/2021  B3: 134      C3: 2
+           ... และต่อไป
+           ```
         
-except Exception as e:
-    st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล: {e}")
+        **ขั้นตอนที่ 2: แชร์ Google Sheets**
+        1. คลิกปุ่ม "Share" มุมขวาบน
+        2. เปลี่ยน "Restricted" เป็น **"Anyone with the link"**
+        3. ตั้งสิทธิ์เป็น **"Viewer"** หรือ **"Editor"**
+        4. คลิก "Copy link"
+        
+        **ขั้นตอนที่ 3: ใส่ URL ด้านล่าง**
+        """)
+    
+    # ตัวอย่าง URL
+    st.info("💡 **ตัวอย่าง Google Sheets URL:**\n`https://docs.google.com/spreadsheets/d/1ABC123.../edit?usp=sharing`")
+    
+    # Input สำหรับ Google Sheets URL
+    sheets_url = st.text_input(
+        "🔗 URL ของ Google Sheets:",
+        placeholder="วาง Google Sheets URL ที่นี่...",
+        help="URL ต้องเป็นแบบ public (Anyone with link can view)"
+    )
+    
+    if sheets_url:
+        try:
+            # แปลง Google Sheets URL เป็น CSV export URL
+            if "docs.google.com/spreadsheets" in sheets_url:
+                # ดึง spreadsheet ID
+                if "/d/" in sheets_url:
+                    sheet_id = sheets_url.split("/d/")[1].split("/")[0]
+                    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=0"
+                    
+                    with st.spinner("🔄 กำลังดาวน์โหลดข้อมูลจาก Google Sheets..."):
+                        # อ่านข้อมูลจาก Google Sheets
+                        df_sheets = pd.read_csv(csv_url)
+                        
+                        # ตรวจสอบคอลัมน์ที่จำเป็น
+                        required_columns = ['end_date', 'cases', 'week_num']
+                        missing_columns = [col for col in required_columns if col not in df_sheets.columns]
+                        
+                        if missing_columns:
+                            st.error(f"❌ Google Sheets ขาดคอลัมน์: {', '.join(missing_columns)}")
+                        else:
+                            # ทำความสะอาดข้อมูล
+                            df_sheets['end_date'] = pd.to_datetime(df_sheets['end_date'], format='%d/%m/%Y', errors='coerce')
+                            df_sheets['cases'] = pd.to_numeric(df_sheets['cases'], errors='coerce')
+                            df_sheets['week_num'] = pd.to_numeric(df_sheets['week_num'], errors='coerce')
+                            
+                            # ลบแถวที่มีข้อมูลไม่ครบ
+                            df_sheets = df_sheets.dropna().reset_index(drop=True)
+                            
+                            if len(df_sheets) > 0:
+                                # เรียงข้อมูลตามวันที่
+                                df_sheets = df_sheets.sort_values('end_date').reset_index(drop=True)
+                                
+                                # เก็บข้อมูลใน session state
+                                st.session_state.current_data = df_sheets
+                                st.session_state.data_source = "Google Sheets"
+                                
+                                st.success(f"✅ เชื่อมต่อ Google Sheets สำเร็จ! {len(df_sheets)} สัปดาห์")
+                                
+                                # แสดงข้อมูลพื้นฐาน
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("ช่วงเวลา", f"{df_sheets['end_date'].min().strftime('%d/%m/%Y')} - {df_sheets['end_date'].max().strftime('%d/%m/%Y')}")
+                                with col2:
+                                    st.metric("ผู้ป่วยเฉลี่ย", f"{df_sheets['cases'].mean():.1f}")
+                                with col3:
+                                    st.metric("จำนวนสัปดาห์", len(df_sheets))
+                                
+                                # ปุ่มรีเฟรชข้อมูล
+                                if st.button("🔄 รีเฟรชข้อมูลจาก Google Sheets"):
+                                    st.rerun()
+                                    
+                            else:
+                                st.error("❌ ไม่พบข้อมูลที่ถูกต้องใน Google Sheets")
+                else:
+                    st.error("❌ URL ไม่ถูกต้อง กรุณาใช้ URL ของ Google Sheets")
+            else:
+                st.error("❌ กรุณาใส่ URL ของ Google Sheets")
+                
+        except Exception as e:
+            st.error(f"❌ ไม่สามารถเชื่อมต่อ Google Sheets ได้: {str(e)}")
+            st.info("💡 **แนวทางแก้ไข:**\n- ตรวจสอบว่า URL ถูกต้อง\n- ตรวจสอบว่าแชร์เป็น 'Anyone with link'\n- ลองรีเฟรชหน้าเว็บ")
+
+# === วิธีที่ 2: อัปโหลดไฟล์ CSV ===
+elif data_source == "📁 อัปโหลดไฟล์ CSV":
+    st.markdown("### 📁 อัปโหลดไฟล์ CSV")
+    
+    uploaded_file = st.file_uploader(
+        "เลือกไฟล์ CSV",
+        type=['csv'],
+        help="ไฟล์ต้องมีคอลัมน์: end_date, cases, week_num"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # อ่านไฟล์ CSV
+            df_uploaded = pd.read_csv(uploaded_file)
+            
+            # ตรวจสอบคอลัมน์ที่จำเป็น
+            required_columns = ['end_date', 'cases', 'week_num']
+            missing_columns = [col for col in required_columns if col not in df_uploaded.columns]
+            
+            if missing_columns:
+                st.error(f"❌ ไฟล์ขาดคอลัมน์: {', '.join(missing_columns)}")
+            else:
+                # แปลงประเภทข้อมูล
+                df_uploaded['end_date'] = pd.to_datetime(df_uploaded['end_date'], format='%d/%m/%Y', errors='coerce')
+                df_uploaded['cases'] = pd.to_numeric(df_uploaded['cases'], errors='coerce')
+                df_uploaded['week_num'] = pd.to_numeric(df_uploaded['week_num'], errors='coerce')
+                
+                # ลบแถวที่มีข้อมูลไม่ครบ
+                df_uploaded = df_uploaded.dropna().reset_index(drop=True)
+                
+                if len(df_uploaded) > 0:
+                    # เรียงข้อมูลตามวันที่
+                    df_uploaded = df_uploaded.sort_values('end_date').reset_index(drop=True)
+                    
+                    # เก็บข้อมูลใน session state
+                    st.session_state.current_data = df_uploaded
+                    st.session_state.data_source = f"ไฟล์: {uploaded_file.name}"
+                    
+                    st.success(f"✅ อัปโหลดไฟล์สำเร็จ! {len(df_uploaded)} สัปดาห์")
+                    
+                    # แสดงข้อมูลพื้นฐาน
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("ช่วงเวลา", f"{df_uploaded['end_date'].min().strftime('%d/%m/%Y')} - {df_uploaded['end_date'].max().strftime('%d/%m/%Y')}")
+                    with col2:
+                        st.metric("ผู้ป่วยเฉลี่ย", f"{df_uploaded['cases'].mean():.1f}")
+                    with col3:
+                        st.metric("จำนวนสัปดาห์", len(df_uploaded))
+                else:
+                    st.error("❌ ไม่พบข้อมูลที่ถูกต้องในไฟล์")
+                    
+        except Exception as e:
+            st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {str(e)}")
+
+# === วิธีที่ 3: ข้อมูลตัวอย่าง ===
+else:  # ข้อมูลตัวอย่าง
+    st.markdown("### 🎯 ใช้ข้อมูลตัวอย่าง")
+    st.info("💡 ข้อมูลจำลองสำหรับทดสอบระบบ (52 สัปดาห์)")
+    
+    # สร้างข้อมูลตัวอย่าง
+    dates = pd.date_range(start='2024-01-07', end='2024-12-29', freq='W')
+    cases = []
+    
+    for i, date in enumerate(dates):
+        week_of_year = date.isocalendar()[1]
+        seasonal = 80 + 30 * np.sin(2 * np.pi * week_of_year / 52)
+        noise = np.random.normal(0, 10)
+        cases.append(max(10, int(seasonal + noise)))
+    
+    df_sample = pd.DataFrame({
+        'end_date': dates,
+        'cases': cases,
+        'week_num': range(1, len(dates) + 1)
+    })
+    
+    # เก็บข้อมูลใน session state
+    st.session_state.current_data = df_sample
+    st.session_state.data_source = "ข้อมูลตัวอย่าง"
+
+# ใช้ข้อมูลที่เก็บใน session state
+if st.session_state.current_data is not None:
+    df = st.session_state.current_data.copy()
+    st.info(f"🔄 แหล่งข้อมูลปัจจุบัน: **{st.session_state.data_source}**")
+    
+    # แสดงตัวอย่างข้อมูล
+    with st.expander("ดูตัวอย่างข้อมูล"):
+        st.dataframe(df.head(10))
+        
+    # ปุ่มล้างข้อมูล
+    if st.button("🗑️ ล้างข้อมูลและเลือกใหม่"):
+        st.session_state.current_data = None
+        st.session_state.data_source = "ตัวอย่าง"
+        st.rerun()
+else:
+    st.error("❌ ไม่พบข้อมูล กรุณาเลือกแหล่งข้อมูลด้านบน")
     st.stop()
+
+# ตรวจสอบคุณภาพข้อมูล
+st.subheader("📊 วิเคราะห์คุณภาพข้อมูล")
+
+# แสดงข้อมูลพื้นฐาน
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("จำนวนสัปดาห์", len(df))
+with col2:
+    st.metric("ช่วงเวลา", f"{df['week_num'].min()}-{df['week_num'].max()}")
+with col3:
+    st.metric("ผู้ป่วยเฉลี่ย", f"{df['cases'].mean():.1f} ราย")
+with col4:
+    st.metric("ช่วงข้อมูล", f"{(df['end_date'].max() - df['end_date'].min()).days // 7} สัปดาห์")
+
+# เตือนถ้าข้อมูลน้อย
+if len(df) < 8:
+    st.warning("⚠️ ข้อมูลมีน้อยกว่า 8 สัปดาห์ - การพยากรณ์อาจไม่แม่นยำ")
+
+# เตือนถ้ามีค่าผิดปกติ
+if df['cases'].max() > df['cases'].mean() * 3:
+    st.warning("⚠️ พบค่าผิดปกติในข้อมูล - อาจส่งผลต่อการพยากรณ์")
 
 # --- 3. เตรียมข้อมูลสำหรับ Prophet ---
 # Prophet ต้องการคอลัมน์ 'ds' (วันที่) และ 'y' (ค่าที่ต้องการพยากรณ์)
@@ -71,11 +273,11 @@ def train_and_validate_prophet_model(data):
     model = Prophet(
         daily_seasonality=False,
         weekly_seasonality=True,
-        yearly_seasonality=False,  # ปิดเพราะข้อมูลไม่ครบปี
-        seasonality_mode='additive',  # ใช้ additive แทน multiplicative
+        yearly_seasonality=True if len(data) >= 52 else False,  # ปรับตามความยาวข้อมูล
+        seasonality_mode='additive',
         interval_width=0.95,
-        changepoint_prior_scale=0.05,  # ลด sensitivity ของ trend changes
-        seasonality_prior_scale=10.0   # ลด seasonality effect
+        changepoint_prior_scale=0.05,
+        seasonality_prior_scale=10.0
     )
     
     # เทรนด้วยข้อมูล train
@@ -97,7 +299,7 @@ def train_and_validate_prophet_model(data):
         model_final = Prophet(
             daily_seasonality=False,
             weekly_seasonality=True,
-            yearly_seasonality=False,
+            yearly_seasonality=True if len(data) >= 52 else False,
             seasonality_mode='additive',
             interval_width=0.95,
             changepoint_prior_scale=0.05,
@@ -112,7 +314,7 @@ def train_and_validate_prophet_model(data):
 model, val_mae, val_mape, has_validation = train_and_validate_prophet_model(prophet_df)
 
 # --- 5. ส่วนสำหรับผู้ใช้ป้อนข้อมูลและพยากรณ์ ---
-st.header("พยากรณ์จำนวนผู้ป่วย")
+st.header("🔮 พยากรณ์จำนวนผู้ป่วย")
 
 # จำกัดจำนวนสัปดาห์การพยากรณ์ให้สมเหตุสมผล
 max_forecast_weeks = min(12, len(df) // 2)  # ไม่เกิน 12 สัปดาห์ หรือ 50% ของข้อมูลเดิม
@@ -154,15 +356,15 @@ if forecast_ratio > 3 or forecast_ratio < 0.3:
     st.warning(f"⚠️ การพยากรณ์อาจไม่สมเหตุสมผล (เปลี่ยนแปลง {forecast_ratio:.1f} เท่าจากค่าเฉลี่ยเดิม)")
 
 # จำกัดค่าพยากรณ์ให้อยู่ในช่วงที่สมเหตุสมผล
-min_reasonable = max(0, historical_mean * 0.1)  # ไม่ต่ำกว่า 10% ของค่าเฉลี่ย
-max_reasonable = historical_mean * 5  # ไม่เกิน 5 เท่าของค่าเฉลี่ย
+min_reasonable = max(0, historical_mean * 0.1)
+max_reasonable = historical_mean * 5
 
 forecast_future['yhat_adjusted'] = forecast_future['yhat'].clip(min_reasonable, max_reasonable)
 forecast_future['yhat_upper_adjusted'] = forecast_future['yhat_upper'].clip(min_reasonable, max_reasonable)
 forecast_future['yhat_lower_adjusted'] = forecast_future['yhat_lower'].clip(0, max_reasonable)
 
 # --- 6. แสดงผลลัพธ์การพยากรณ์ ---
-st.subheader("ผลการพยากรณ์")
+st.subheader("📋 ผลการพยากรณ์")
 
 # แสดงข้อมูล validation ถ้ามี
 if has_validation:
@@ -181,7 +383,7 @@ forecast_display = pd.DataFrame({
     'ช่วงต่ำ (95% CI)': forecast_future['yhat_lower_adjusted'].round(0).astype(int),
     'ช่วงสูง (95% CI)': forecast_future['yhat_upper_adjusted'].round(0).astype(int)
 })
-st.dataframe(forecast_display)
+st.dataframe(forecast_display, use_container_width=True)
 
 # เตือนหากค่าพยากรณ์แตกต่างจาก baseline มากเกินไป
 max_diff_percent = abs((forecast_future['yhat_adjusted'] - recent_avg) / recent_avg * 100).max()
@@ -191,7 +393,7 @@ elif max_diff_percent < 5:
     st.info(f"ℹ️ การพยากรณ์ใกล้เคียง baseline ({max_diff_percent:.1f}%) - โมเดลอาจไม่ได้เพิ่มคุณค่ามากนัก")
 
 # --- 7. แสดงกราฟแนวโน้มและการพยากรณ์ด้วย Plotly ---
-st.subheader("กราฟแนวโน้มและการพยากรณ์")
+st.subheader("📈 กราฟแนวโน้มและการพยากรณ์")
 
 # ใช้ week_num แทน date สำหรับ x-axis เพื่อให้เข้าใจง่าย
 fig = go.Figure()
@@ -464,27 +666,18 @@ with col3:
     )
 
 # แสดงกราฟ components ของ Prophet
-st.subheader("การวิเคราะห์องค์ประกอบ (Trend & Seasonality)")
+st.subheader("🔧 การวิเคราะห์องค์ประกอบ (Trend & Seasonality)")
 
-# สร้างกราฟ trend
-fig_components = model.plot_components(forecast)
-st.pyplot(fig_components)
+try:
+    # สร้างกราฟ trend
+    fig_components = model.plot_components(forecast)
+    st.pyplot(fig_components)
+except Exception as e:
+    st.warning(f"ไม่สามารถแสดงกราฟ components ได้: {str(e)}")
 
 st.caption("หมายเหตุ: การพยากรณ์นี้ใช้โมเดล Facebook Prophet ซึ่งสามารถจับ pattern และ seasonality ได้ดีกว่าโมเดลเชิงเส้น")
 
-# --- (Optional) ส่วนสำหรับอัปโหลดไฟล์ ---
-st.sidebar.subheader("อัปโหลดข้อมูลใหม่ (ตัวเลือกเสริม)")
-
-uploaded_file = st.sidebar.file_uploader("เลือกไฟล์ CSV ที่มีคอลัมน์ 'end_date' และ 'cases'", type=["csv"])
-
-if uploaded_file is not None:
-    uploaded_df = pd.read_csv(uploaded_file)
-    if 'end_date' in uploaded_df.columns and 'cases' in uploaded_df.columns:
-        st.sidebar.write("อัปโหลดข้อมูลสำเร็จ! โปรดรีเฟรชหน้าเว็บเพื่อใช้ข้อมูลใหม่")
-    else:
-        st.sidebar.error("ไฟล์ CSV ต้องมีคอลัมน์ 'end_date' และ 'cases'")
-
-# --- Model Performance Info ---
+# --- Sidebar Information ---
 st.sidebar.subheader("ข้อมูลโมเดล")
 st.sidebar.info("""
 **Facebook Prophet Features:**
@@ -499,7 +692,7 @@ st.sidebar.subheader("🔍 ความน่าเชื่อถือขอ�
 st.sidebar.warning("""
 **ข้อจำกัดสำคัญ:**
 
-1. **ข้อมูลจำกัด**: มีข้อมูลไม่เพียงพอสำหรับ long-term prediction
+1. **ข้อมูลจำกัด**: ควรมีข้อมูลอย่างน้อย 1 ปี
 
 2. **ไม่มี External Factors**: ไม่รวมปัจจัยภายนอก เช่น:
    - การระบาดของโรค
@@ -514,7 +707,7 @@ st.sidebar.warning("""
 - อัปเดตโมเดลเมื่อมีข้อมูลใหม่
 """)
 
-st.sidebar.subheader("ค่าทางสถิติที่แสดง")
+st.sidebar.subheader("📊 ข้อมูลสถิติ")
 st.sidebar.info("""
 **Metrics:**
 - **MAE**: ความผิดพลาดเฉลี่ย
@@ -531,3 +724,14 @@ st.sidebar.info("""
 - 10-20%: ดี
 - > 20%: ต้องปรับปรุง
 """)
+
+# แสดงข้อมูลแหล่งข้อมูลปัจจุบัน
+st.sidebar.subheader("📊 แหล่งข้อมูลปัจจุบัน")
+st.sidebar.info(f"**ใช้ข้อมูลจาก:** {st.session_state.data_source}")
+
+if st.session_state.data_source == "Google Sheets":
+    st.sidebar.success("✅ เชื่อมต่อ Google Sheets สำเร็จ - ข้อมูลจะอัปเดตแบบ real-time")
+elif "ไฟล์:" in st.session_state.data_source:
+    st.sidebar.info("📁 ใช้ไฟล์ที่อัปโหลด - ข้อมูลคงที่ตามไฟล์")
+else:
+    st.sidebar.warning("🎯 ใช้ข้อมูลตัวอย่าง - เพื่อการทดสอบเท่านั้น")
