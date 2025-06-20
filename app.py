@@ -15,7 +15,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("😷 การพยากรณ์โรคไข้หวัดใหญ่เบื้องต้น")
+st.title("😷 พยากรณ์โรคไข้หวัดใหญ่เบื้องต้น")
 st.write("เครื่องมือนี้ช่วยพยากรณ์จำนวนผู้ป่วยไข้หวัดใหญ่ในสัปดาห์ข้างหน้า โดยใช้ Facebook Prophet")
 
 # --- 2. โหลดข้อมูล ---
@@ -35,19 +35,60 @@ prophet_df = pd.DataFrame({
     'y': df['cases']
 })
 
-# --- 4. สร้างและเทรนโมเดล Prophet ---
+# เพิ่ม week_num สำหรับการแสดงผล
+prophet_df['week_num'] = df['week_num']
+
+# --- 4. สร้างและเทรนโมเดล Prophet (พร้อม validation) ---
 @st.cache_data
-def train_prophet_model(data):
+def train_and_validate_prophet_model(data):
+    # แบ่งข้อมูลเป็น train/test (80/20)
+    split_point = int(len(data) * 0.8)
+    train_data = data.iloc[:split_point]
+    test_data = data.iloc[split_point:]
+    
+    # สร้างโมเดล Prophet แบบ conservative
     model = Prophet(
         daily_seasonality=False,
         weekly_seasonality=True,
-        yearly_seasonality=True,
-        interval_width=0.95  # 95% confidence interval
+        yearly_seasonality=False,  # ปิดเพราะข้อมูลไม่ครบปี
+        seasonality_mode='additive',  # ใช้ additive แทน multiplicative
+        interval_width=0.95,
+        changepoint_prior_scale=0.05,  # ลด sensitivity ของ trend changes
+        seasonality_prior_scale=10.0   # ลด seasonality effect
     )
-    model.fit(data)
-    return model
+    
+    # เทรนด้วยข้อมูล train
+    model.fit(train_data)
+    
+    # ทดสอบกับข้อมูล test
+    if len(test_data) > 0:
+        future_test = model.make_future_dataframe(periods=len(test_data), freq='W')
+        forecast_test = model.predict(future_test)
+        
+        # คำนวณ validation metrics
+        test_actual = test_data['y'].values
+        test_predicted = forecast_test.iloc[-len(test_data):]['yhat'].values
+        
+        validation_mae = mean_absolute_error(test_actual, test_predicted)
+        validation_mape = np.mean(np.abs((test_actual - test_predicted) / test_actual)) * 100
+        
+        # เทรนใหม่ด้วยข้อมูลทั้งหมด
+        model_final = Prophet(
+            daily_seasonality=False,
+            weekly_seasonality=True,
+            yearly_seasonality=False,
+            seasonality_mode='additive',
+            interval_width=0.95,
+            changepoint_prior_scale=0.05,
+            seasonality_prior_scale=10.0
+        )
+        model_final.fit(data)
+        
+        return model_final, validation_mae, validation_mape, True
+    else:
+        return model, None, None, False
 
-model = train_prophet_model(prophet_df)
+model, val_mae, val_mape, has_validation = train_and_validate_prophet_model(prophet_df)
 
 # --- 5. ส่วนสำหรับผู้ใช้ป้อนข้อมูลและพยากรณ์ ---
 st.header("พยากรณ์จำนวนผู้ป่วย")
@@ -66,16 +107,41 @@ forecast = model.predict(future)
 # แยกข้อมูลการพยากรณ์ (เฉพาะส่วนอนาคต)
 forecast_future = forecast.tail(weeks_to_forecast)
 
+# เพิ่ม week_num สำหรับการแสดงผล
+last_week_num = df['week_num'].max()
+forecast_future = forecast_future.copy()
+forecast_future['week_num'] = range(last_week_num + 1, last_week_num + weeks_to_forecast + 1)
+
+# เพิ่มการเปรียบเทียบกับ Simple Baseline (ค่าเฉลี่ย 4 สัปดาห์ล่าสุด)
+recent_avg = df['cases'].tail(4).mean()
+baseline_forecast = [recent_avg] * weeks_to_forecast
+
 # --- 6. แสดงผลลัพธ์การพยากรณ์ ---
 st.subheader("ผลการพยากรณ์")
 
+# แสดงข้อมูล validation ถ้ามี
+if has_validation:
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Validation MAE", f"{val_mae:.2f}")
+    with col2:
+        st.metric("Validation MAPE", f"{val_mape:.1f}%")
+
 forecast_display = pd.DataFrame({
+    'สัปดาห์ที่': forecast_future['week_num'].astype(int),
     'วันที่': forecast_future['ds'].dt.strftime('%d/%m/%Y'),
-    'จำนวนผู้ป่วยที่พยากรณ์ (ราย)': forecast_future['yhat'].astype(int),
-    'ค่าต่ำสุด (95% CI)': forecast_future['yhat_lower'].astype(int),
-    'ค่าสูงสุด (95% CI)': forecast_future['yhat_upper'].astype(int)
+    'Prophet พยากรณ์ (ราย)': forecast_future['yhat'].round(0).astype(int),
+    'Baseline เฉลี่ย (ราย)': [int(recent_avg)] * weeks_to_forecast,
+    'ต่างจาก Baseline': (forecast_future['yhat'] - recent_avg).round(0).astype(int),
+    'ช่วงต่ำ (95% CI)': forecast_future['yhat_lower'].round(0).astype(int),
+    'ช่วงสูง (95% CI)': forecast_future['yhat_upper'].round(0).astype(int)
 })
 st.dataframe(forecast_display)
+
+# เตือนหากค่าพยากรณ์แตกต่างจาก baseline มากเกินไป
+max_diff_percent = abs((forecast_future['yhat'] - recent_avg) / recent_avg * 100).max()
+if max_diff_percent > 50:
+    st.warning(f"⚠️ การพยากรณ์แตกต่างจาก baseline มากถึง {max_diff_percent:.1f}% - ควรตรวจสอบความสมเหตุสมผล")
 
 # --- 7. แสดงกราฟแนวโน้มและการพยากรณ์ด้วย Plotly ---
 st.subheader("กราฟแนวโน้มและการพยากรณ์")
@@ -113,14 +179,14 @@ fig.add_trace(go.Scatter(
     showlegend=True
 ))
 
-# เพิ่มเส้นแนวโน้มทั้งหมด (รวมอดีตและอนาคต)
+# เพิ่มการพยากรณ์ baseline ในกราฟ
 fig.add_trace(go.Scatter(
-    x=forecast['ds'],
-    y=forecast['yhat'],
-    mode='lines',
-    name='แนวโน้มรวม',
-    line=dict(color='green', dash='dash', width=1),
-    opacity=0.7
+    x=[df['week_num'].max() + i for i in range(1, weeks_to_forecast + 1)],
+    y=baseline_forecast,
+    mode='lines+markers',
+    name='Baseline (เฉลี่ย 4 สัปดาห์)',
+    line=dict(color='orange', width=2, dash='dot'),
+    marker=dict(size=6, symbol='square')
 ))
 
 # ตั้งค่ากราฟ
@@ -347,6 +413,25 @@ st.sidebar.info("""
 - ตรวจจับการเปลี่ยนแปลง trend
 """)
 
+st.sidebar.subheader("🔍 ความน่าเชื่อถือของโมเดล")
+st.sidebar.warning("""
+**ข้อจำกัดสำคัญ:**
+
+1. **ข้อมูลจำกัด**: มีข้อมูลไม่เพียงพอสำหรับ long-term prediction
+
+2. **ไม่มี External Factors**: ไม่รวมปัจจัยภายนอก เช่น:
+   - การระบาดของโรค
+   - นโยบายสาธารณสุข
+   - การเปลี่ยนแปลงสภาพอากาศ
+
+3. **Extrapolation Risk**: การคาดการณ์ไกลจากข้อมูลเดิม
+
+**คำแนะนำ:**
+- ใช้ร่วมกับความรู้ของผู้เชี่ยวชาญ
+- ตรวจสอบความสมเหตุสมผล
+- อัปเดตโมเดลเมื่อมีข้อมูลใหม่
+""")
+
 st.sidebar.subheader("ค่าทางสถิติที่แสดง")
 st.sidebar.info("""
 **Metrics:**
@@ -354,6 +439,10 @@ st.sidebar.info("""
 - **RMSE**: รากที่สองของความผิดพลาดกำลังสอง
 - **MAPE**: เปอร์เซ็นต์ความผิดพลาด  
 - **R²**: ค่าสัมประสิทธิ์การตัดสินใจ
+
+**Baseline Comparison:**
+- เปรียบเทียบกับค่าเฉลี่ย 4 สัปดาห์ล่าสุด
+- ช่วยประเมินว่าโมเดลมีประโยชน์มากกว่า simple average หรือไม่
 
 **เกณฑ์ประเมิน MAPE:**
 - < 10%: ดีมาก
