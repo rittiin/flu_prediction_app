@@ -3,18 +3,44 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 import numpy as np
-
-# --- เพิ่มโค้ดส่วนนี้เพื่อตั้งค่า Font สำหรับภาษาไทย ---
 import matplotlib.font_manager as fm
 
-# (เปลี่ยน 'TH Sarabun New' เป็นชื่อ Font ที่มีในเครื่องของคุณ ถ้าใช้ Windows)
-# (สำหรับ Mac อาจจะเป็น 'Thonburi' หรือ 'Ayuthaya')
-# (สำหรับ Linux อาจจะเป็น 'Noto Sans Thai' หรือ 'Liberation Sans')
-thai_font_name = 'Noto Sans Thai' # หรือ 'Liberation Sans'
+# --- เพิ่มโค้ดส่วนนี้เพื่อตรวจสอบ Font ที่มีอยู่ ---
+# (จะแสดงใน Streamlit logs หรือในหน้าเว็บ ถ้าคุณ st.write ออกมา)
+font_list = fm.findSystemFonts(fontpaths=None, fontext='ttf')
+available_fonts = []
+for font_path in font_list:
+    try:
+        prop = fm.FontProperties(fname=font_path)
+        available_fonts.append(prop.get_name())
+    except Exception as e:
+        # st.warning(f"Error loading font {font_path}: {e}") # อาจจะเยอะไป ถ้ามี error
+        pass
 
-plt.rcParams['font.family'] = thai_font_name # กำหนด Font หลัก
-plt.rcParams['axes.unicode_minus'] = False # แก้ไขเครื่องหมายลบภาษาไทย
-# --- สิ้นสุดโค้ดตั้งค่า Font ---
+# สามารถพิมพ์ลงในหน้า Streamlit เพื่อดูได้ (ชั่วคราว)
+# st.subheader("Available Fonts on Server:")
+# st.write(sorted(list(set(available_fonts))))
+
+# ตรวจสอบว่ามี Noto Sans Thai หรือไม่
+if 'Noto Sans Thai' in available_fonts:
+    st.success("พบ 'Noto Sans Thai' ในระบบ!")
+    thai_font_name = 'Noto Sans Thai'
+else:
+    # ลองใช้ Font อื่นที่มักจะมีใน Linux
+    if 'Liberation Sans' in available_fonts:
+        st.warning("ไม่พบ 'Noto Sans Thai', ใช้ 'Liberation Sans' แทน")
+        thai_font_name = 'Liberation Sans'
+    elif 'DejaVu Sans' in available_fonts:
+        st.warning("ไม่พบ 'Noto Sans Thai', ใช้ 'DejaVu Sans' แทน")
+        thai_font_name = 'DejaVu Sans'
+    else:
+        st.error("ไม่พบ Font ภาษาไทยที่เหมาะสม กรุณาตรวจสอบการติดตั้ง Font")
+        thai_font_name = 'sans-serif' # Fallback to generic sans-serif
+
+
+plt.rcParams['font.family'] = thai_font_name
+plt.rcParams['axes.unicode_minus'] = False
+# --- สิ้นสุดโค้ดตรวจสอบ Font ---
 
 # --- 1. ตั้งค่าหน้าเว็บ ---
 st.set_page_config(
