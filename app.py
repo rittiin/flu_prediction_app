@@ -147,52 +147,107 @@ fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
 st.plotly_chart(fig, use_container_width=True)
 
 # --- 8. คำนวณค่าทางสถิติของโมเดล ---
-# ใช้ข้อมูลในอดีตเพื่อประเมินความแม่นยำ
-historical_forecast = forecast.iloc[:len(df)]
-actual_values = df['cases'].values
-predicted_values = historical_forecast['yhat'].values
-
-# คำนวณค่า error metrics
-mae = mean_absolute_error(actual_values, predicted_values)
-rmse = np.sqrt(mean_squared_error(actual_values, predicted_values))
-mape = np.mean(np.abs((actual_values - predicted_values) / actual_values)) * 100
-r2 = r2_score(actual_values, predicted_values)
+try:
+    # ใช้ข้อมูลในอดีตเพื่อประเมินความแม่นยำ
+    historical_forecast = forecast[forecast['ds'].isin(df['end_date'])]
+    
+    # ตรวจสอบว่ามีข้อมูลครบหรือไม่
+    if len(historical_forecast) == len(df):
+        actual_values = df['cases'].values
+        predicted_values = historical_forecast['yhat'].values
+        
+        # คำนวณค่า error metrics
+        mae = mean_absolute_error(actual_values, predicted_values)
+        rmse = np.sqrt(mean_squared_error(actual_values, predicted_values))
+        mape = np.mean(np.abs((actual_values - predicted_values) / actual_values)) * 100
+        r2 = r2_score(actual_values, predicted_values)
+        
+        show_metrics = True
+    else:
+        show_metrics = False
+        st.warning("⚠️ ไม่สามารถคำนวณค่าทางสถิติได้ เนื่องจากข้อมูลไม่ตรงกัน")
+        
+except Exception as e:
+    show_metrics = False
+    st.error(f"⚠️ เกิดข้อผิดพลาดในการคำนวณค่าทางสถิติ: {e}")
 
 # --- 9. แสดงข้อมูลทางสถิติ ---
-st.subheader("📊 ค่าทางสถิติและการประเมินโมเดล")
+if show_metrics:
+    st.subheader("📊 ค่าทางสถิติและการประเมินโมเดล")
 
-# แสดงค่าความแม่นยำของโมเดล
-col1, col2, col3, col4 = st.columns(4)
+    # แสดงค่าความแม่นยำของโมเดล
+    col1, col2, col3, col4 = st.columns(4)
 
-with col1:
-    st.metric(
-        label="MAE",
-        value=f"{mae:.2f}",
-        help="Mean Absolute Error - ค่าเฉลี่ยของความผิดพลาด"
+    with col1:
+        st.metric(
+            label="MAE",
+            value=f"{mae:.2f}",
+            help="Mean Absolute Error - ค่าเฉลี่ยของความผิดพลาด"
+        )
+
+    with col2:
+        st.metric(
+            label="RMSE", 
+            value=f"{rmse:.2f}",
+            help="Root Mean Square Error - รากที่สองของค่าเฉลี่ยความผิดพลาดยกกำลังสอง"
+        )
+
+    with col3:
+        st.metric(
+            label="MAPE",
+            value=f"{mape:.1f}%",
+            help="Mean Absolute Percentage Error - เปอร์เซ็นต์ความผิดพลาด"
+        )
+
+    with col4:
+        st.metric(
+            label="R²",
+            value=f"{r2:.3f}",
+            help="R-squared - ค่าสัมประสิทธิ์การตัดสินใจ (0-1, ยิ่งใกล้ 1 ยิ่งดี)"
+        )
+
+    # สรุปผลการประเมิน
+    if mape < 10:
+        accuracy_level = "ดีมาก (MAPE < 10%)"
+        accuracy_color = "green"
+    elif mape < 20:
+        accuracy_level = "ดี (MAPE 10-20%)"
+        accuracy_color = "orange" 
+    else:
+        accuracy_level = "ต้องปรับปรุง (MAPE > 20%)"
+        accuracy_color = "red"
+
+    st.info(f"**สรุปความแม่นยำของโมเดล**: {accuracy_level}")
+
+    # แสดงกราฟ Residuals Analysis
+    st.subheader("🔍 การวิเคราะห์ Residuals")
+
+    residuals = actual_values - predicted_values
+
+    fig_residuals = go.Figure()
+
+    # กราฟ residuals vs predicted
+    fig_residuals.add_trace(go.Scatter(
+        x=predicted_values,
+        y=residuals,
+        mode='markers',
+        name='Residuals',
+        marker=dict(color='purple', size=8)
+    ))
+
+    # เส้น y=0
+    fig_residuals.add_hline(y=0, line_dash="dash", line_color="red")
+
+    fig_residuals.update_layout(
+        title="Residuals vs Predicted Values",
+        xaxis_title="ค่าพยากรณ์",
+        yaxis_title="Residuals (จริง - พยากรณ์)",
+        height=400
     )
 
-with col2:
-    st.metric(
-        label="RMSE", 
-        value=f"{rmse:.2f}",
-        help="Root Mean Square Error - รากที่สองของค่าเฉลี่ยความผิดพลาดยกกำลังสอง"
-    )
+    st.plotly_chart(fig_residuals, use_container_width=True)
 
-with col3:
-    st.metric(
-        label="MAPE",
-        value=f"{mape:.1f}%",
-        help="Mean Absolute Percentage Error - เปอร์เซ็นต์ความผิดพลาด"
-    )
-
-with col4:
-    st.metric(
-        label="R²",
-        value=f"{r2:.3f}",
-        help="R-squared - ค่าสัมประสิทธิ์การตัดสินใจ (0-1, ยิ่งใกล้ 1 ยิ่งดี)"
-    )
-
-# แสดงข้อมูลสถิติพื้นฐาน
+# --- 10. แสดงสถิติข้อมูลพื้นฐาน ---
 st.subheader("📈 สถิติข้อมูลและการพยากรณ์")
 
 col1, col2 = st.columns(2)
@@ -259,50 +314,6 @@ with col3:
         value=f"±{uncertainty/2:.1f} ราย",
         help="ช่วงความเชื่อมั่น 95% เฉลี่ย"
     )
-
-# แสดงกราฟ Residuals Analysis
-st.subheader("🔍 การวิเคราะห์ Residuals")
-
-residuals = actual_values - predicted_values
-
-fig_residuals = go.Figure()
-
-# กราฟ residuals vs predicted
-fig_residuals.add_trace(go.Scatter(
-    x=predicted_values,
-    y=residuals,
-    mode='markers',
-    name='Residuals',
-    marker=dict(color='purple', size=8)
-))
-
-# เส้น y=0
-fig_residuals.add_hline(y=0, line_dash="dash", line_color="red")
-
-fig_residuals.update_layout(
-    title="Residuals vs Predicted Values",
-    xaxis_title="ค่าพยากรณ์",
-    yaxis_title="Residuals (จริง - พยากรณ์)",
-    height=400
-)
-
-st.plotly_chart(fig_residuals, use_container_width=True)
-
-# สรุปผลการประเมิน
-if mape < 10:
-    accuracy_level = "ดีมาก (MAPE < 10%)"
-    accuracy_color = "green"
-elif mape < 20:
-    accuracy_level = "ดี (MAPE 10-20%)"
-    accuracy_color = "orange" 
-else:
-    accuracy_level = "ต้องปรับปรุง (MAPE > 20%)"
-    accuracy_color = "red"
-
-st.info(f"**สรุปความแม่นยำของโมเดล**: {accuracy_level}")
-
-# --- 10. แสดงข้อมูลเพิ่มเติมเกี่ยวกับโมเดล ---
-st.subheader("ข้อมูลเพิ่มเติม")
 
 # แสดงกราฟ components ของ Prophet
 st.subheader("การวิเคราะห์องค์ประกอบ (Trend & Seasonality)")
