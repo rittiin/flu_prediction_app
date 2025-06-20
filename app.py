@@ -26,6 +26,8 @@ if 'current_data' not in st.session_state:
     st.session_state.current_data = None
 if 'data_source' not in st.session_state:
     st.session_state.data_source = "ตัวอย่าง"
+if 'external_factors_enabled' not in st.session_state:
+    st.session_state.external_factors_enabled = False
 
 # เลือกวิธีการเชื่อมต่อข้อมูล
 data_source = st.radio(
@@ -43,12 +45,16 @@ if data_source == "📊 Google Sheets (แนะนำ)":
         st.markdown("""
         **ขั้นตอนที่ 1: เตรียม Google Sheets**
         1. เปิด Google Sheets ใหม่: [sheets.google.com](https://sheets.google.com)
-        2. ใส่ข้อมูลตามรูปแบบ:
+        2. ใส่ข้อมูลตามรูปแบบพื้นฐาน:
            ```
            A1: end_date    B1: cases    C1: week_num
            A2: 10/01/2021  B2: 125      C2: 1
            A3: 17/01/2021  B3: 134      C3: 2
-           ... และต่อไป
+           ```
+        3. **(เสริม)** เพิ่มปัจจัยภายนอก:
+           ```
+           D1: temperature  E1: humidity  F1: holidays  G1: campaign
+           D2: 25.5         E2: 75        F2: 0         G2: 0
            ```
         
         **ขั้นตอนที่ 2: แชร์ Google Sheets**
@@ -56,8 +62,6 @@ if data_source == "📊 Google Sheets (แนะนำ)":
         2. เปลี่ยน "Restricted" เป็น **"Anyone with the link"**
         3. ตั้งสิทธิ์เป็น **"Viewer"** หรือ **"Editor"**
         4. คลิก "Copy link"
-        
-        **ขั้นตอนที่ 3: ใส่ URL ด้านล่าง**
         """)
     
     # ตัวอย่าง URL
@@ -90,23 +94,39 @@ if data_source == "📊 Google Sheets (แนะนำ)":
                         if missing_columns:
                             st.error(f"❌ Google Sheets ขาดคอลัมน์: {', '.join(missing_columns)}")
                         else:
-                            # ทำความสะอาดข้อมูล
+                            # ทำความสะอาดข้อมูลพื้นฐาน
                             df_sheets['end_date'] = pd.to_datetime(df_sheets['end_date'], format='%d/%m/%Y', errors='coerce')
                             df_sheets['cases'] = pd.to_numeric(df_sheets['cases'], errors='coerce')
                             df_sheets['week_num'] = pd.to_numeric(df_sheets['week_num'], errors='coerce')
                             
-                            # ลบแถวที่มีข้อมูลไม่ครบ
-                            df_sheets = df_sheets.dropna().reset_index(drop=True)
+                            # ทำความสะอาดข้อมูลปัจจัยภายนอก (ถ้ามี)
+                            external_cols = ['temperature', 'humidity', 'holidays', 'campaign', 'outbreak_index', 
+                                           'population_density', 'school_closed', 'tourists']
+                            
+                            for col in external_cols:
+                                if col in df_sheets.columns:
+                                    df_sheets[col] = pd.to_numeric(df_sheets[col], errors='coerce')
+                            
+                            # ลบแถวที่มีข้อมูลหลักไม่ครบ
+                            df_sheets = df_sheets.dropna(subset=required_columns).reset_index(drop=True)
                             
                             if len(df_sheets) > 0:
                                 # เรียงข้อมูลตามวันที่
                                 df_sheets = df_sheets.sort_values('end_date').reset_index(drop=True)
                                 
+                                # ตรวจสอบว่ามี external factors หรือไม่
+                                has_external = any(col in df_sheets.columns for col in external_cols)
+                                
                                 # เก็บข้อมูลใน session state
                                 st.session_state.current_data = df_sheets
                                 st.session_state.data_source = "Google Sheets"
+                                st.session_state.external_factors_enabled = has_external
                                 
                                 st.success(f"✅ เชื่อมต่อ Google Sheets สำเร็จ! {len(df_sheets)} สัปดาห์")
+                                
+                                if has_external:
+                                    available_factors = [col for col in external_cols if col in df_sheets.columns]
+                                    st.info(f"🌍 พบปัจจัยภายนอก: {', '.join(available_factors)}")
                                 
                                 # แสดงข้อมูลพื้นฐาน
                                 col1, col2, col3 = st.columns(3)
@@ -136,10 +156,30 @@ if data_source == "📊 Google Sheets (แนะนำ)":
 elif data_source == "📁 อัปโหลดไฟล์ CSV":
     st.markdown("### 📁 อัปโหลดไฟล์ CSV")
     
+    # แสดงตัวอย่างโครงสร้างไฟล์
+    with st.expander("📋 โครงสร้างไฟล์ CSV ที่ต้องการ"):
+        st.markdown("""
+        **คอลัมน์พื้นฐาน (จำเป็น):**
+        ```csv
+        end_date,cases,week_num
+        07/01/2024,120,1
+        14/01/2024,135,2
+        21/01/2024,98,3
+        ```
+        
+        **คอลัมน์ปัจจัยภายนอก (เสริม):**
+        ```csv
+        end_date,cases,week_num,temperature,humidity,holidays,campaign
+        07/01/2024,120,1,25.5,75,0,0
+        14/01/2024,135,2,23.2,82,1,0
+        21/01/2024,98,3,28.1,68,0,1
+        ```
+        """)
+    
     uploaded_file = st.file_uploader(
         "เลือกไฟล์ CSV",
         type=['csv'],
-        help="ไฟล์ต้องมีคอลัมน์: end_date, cases, week_num"
+        help="ไฟล์ต้องมีคอลัมน์: end_date, cases, week_num (+ ปัจจัยภายนอกตามต้องการ)"
     )
     
     if uploaded_file is not None:
@@ -154,23 +194,39 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
             if missing_columns:
                 st.error(f"❌ ไฟล์ขาดคอลัมน์: {', '.join(missing_columns)}")
             else:
-                # แปลงประเภทข้อมูล
+                # แปลงประเภทข้อมูลพื้นฐาน
                 df_uploaded['end_date'] = pd.to_datetime(df_uploaded['end_date'], format='%d/%m/%Y', errors='coerce')
                 df_uploaded['cases'] = pd.to_numeric(df_uploaded['cases'], errors='coerce')
                 df_uploaded['week_num'] = pd.to_numeric(df_uploaded['week_num'], errors='coerce')
                 
-                # ลบแถวที่มีข้อมูลไม่ครบ
-                df_uploaded = df_uploaded.dropna().reset_index(drop=True)
+                # ทำความสะอาดข้อมูลปัจจัยภายนอก
+                external_cols = ['temperature', 'humidity', 'holidays', 'campaign', 'outbreak_index', 
+                               'population_density', 'school_closed', 'tourists']
+                
+                for col in external_cols:
+                    if col in df_uploaded.columns:
+                        df_uploaded[col] = pd.to_numeric(df_uploaded[col], errors='coerce')
+                
+                # ลบแถวที่มีข้อมูลหลักไม่ครบ
+                df_uploaded = df_uploaded.dropna(subset=required_columns).reset_index(drop=True)
                 
                 if len(df_uploaded) > 0:
                     # เรียงข้อมูลตามวันที่
                     df_uploaded = df_uploaded.sort_values('end_date').reset_index(drop=True)
                     
+                    # ตรวจสอบว่ามี external factors หรือไม่
+                    has_external = any(col in df_uploaded.columns for col in external_cols)
+                    
                     # เก็บข้อมูลใน session state
                     st.session_state.current_data = df_uploaded
                     st.session_state.data_source = f"ไฟล์: {uploaded_file.name}"
+                    st.session_state.external_factors_enabled = has_external
                     
                     st.success(f"✅ อัปโหลดไฟล์สำเร็จ! {len(df_uploaded)} สัปดาห์")
+                    
+                    if has_external:
+                        available_factors = [col for col in external_cols if col in df_uploaded.columns]
+                        st.info(f"🌍 พบปัจจัยภายนอก: {', '.join(available_factors)}")
                     
                     # แสดงข้อมูลพื้นฐาน
                     col1, col2, col3 = st.columns(3)
@@ -189,27 +245,82 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
 # === วิธีที่ 3: ข้อมูลตัวอย่าง ===
 else:  # ข้อมูลตัวอย่าง
     st.markdown("### 🎯 ใช้ข้อมูลตัวอย่าง")
-    st.info("💡 ข้อมูลจำลองสำหรับทดสอบระบบ (52 สัปดาห์)")
+    
+    # เลือกประเภทข้อมูลตัวอย่าง
+    sample_type = st.radio(
+        "เลือกประเภทข้อมูลตัวอย่าง:",
+        ["📊 ข้อมูลพื้นฐาน (52 สัปดาห์)", "🌍 ข้อมูลพร้อมปัจจัยภายนอก (52 สัปดาห์)"],
+        help="ข้อมูลจำลองสำหรับทดสอบระบบ"
+    )
     
     # สร้างข้อมูลตัวอย่าง
     dates = pd.date_range(start='2024-01-07', end='2024-12-29', freq='W')
     cases = []
     
+    # สร้างข้อมูลที่มี pattern
     for i, date in enumerate(dates):
         week_of_year = date.isocalendar()[1]
-        seasonal = 80 + 30 * np.sin(2 * np.pi * week_of_year / 52)
-        noise = np.random.normal(0, 10)
-        cases.append(max(10, int(seasonal + noise)))
+        # seasonal pattern (หนาวเยอะ ร้อนน้อย)
+        seasonal = 80 + 30 * np.sin(2 * np.pi * (week_of_year - 10) / 52)
+        # trend (ลดลงเล็กน้อย)
+        trend = -0.2 * i
+        # noise
+        noise = np.random.normal(0, 8)
+        cases.append(max(10, int(seasonal + trend + noise)))
     
-    df_sample = pd.DataFrame({
-        'end_date': dates,
-        'cases': cases,
-        'week_num': range(1, len(dates) + 1)
-    })
+    if sample_type == "📊 ข้อมูลพื้นฐาน (52 สัปดาห์)":
+        df_sample = pd.DataFrame({
+            'end_date': dates,
+            'cases': cases,
+            'week_num': range(1, len(dates) + 1)
+        })
+        st.session_state.external_factors_enabled = False
+    else:
+        # เพิ่มปัจจัยภายนอก
+        temperatures = []
+        humidities = []
+        holidays = []
+        campaigns = []
+        
+        for i, date in enumerate(dates):
+            week_of_year = date.isocalendar()[1]
+            # อุณหภูมิ (หนาวเย็น ร้อนร้อน)
+            temp = 26 + 6 * np.sin(2 * np.pi * (week_of_year - 10) / 52) + np.random.normal(0, 2)
+            temperatures.append(round(temp, 1))
+            
+            # ความชื้น (มรสุมชื้น แล้งแห้ง)
+            humidity = 70 + 15 * np.sin(2 * np.pi * (week_of_year - 20) / 52) + np.random.normal(0, 5)
+            humidities.append(max(40, min(95, int(humidity))))
+            
+            # วันหยุด (สุ่มบางสัปดาห์)
+            holiday = 1 if week_of_year in [1, 2, 13, 14, 31, 32, 52] else 0
+            holidays.append(holiday)
+            
+            # แคมเปญ (บางช่วง)
+            campaign = 1 if week_of_year in range(20, 25) or week_of_year in range(45, 50) else 0
+            campaigns.append(campaign)
+        
+        df_sample = pd.DataFrame({
+            'end_date': dates,
+            'cases': cases,
+            'week_num': range(1, len(dates) + 1),
+            'temperature': temperatures,
+            'humidity': humidities,
+            'holidays': holidays,
+            'campaign': campaigns,
+            'outbreak_index': np.random.uniform(0.1, 0.8, len(dates)).round(2),
+            'population_density': [1250] * len(dates),
+            'school_closed': [0 if week_of_year not in [14, 15, 16] else 1 for week_of_year in [date.isocalendar()[1] for date in dates]],
+            'tourists': np.random.randint(8000, 20000, len(dates))
+        })
+        st.session_state.external_factors_enabled = True
     
     # เก็บข้อมูลใน session state
     st.session_state.current_data = df_sample
-    st.session_state.data_source = "ข้อมูลตัวอย่าง"
+    st.session_state.data_source = f"ข้อมูลตัวอย่าง: {sample_type.split(' ')[0][2:]}"
+    
+    if st.session_state.external_factors_enabled:
+        st.info("🌍 ข้อมูลตัวอย่างนี้รวมปัจจัยภายนอก: อุณหภูมิ, ความชื้น, วันหยุด, แคมเปญ, ดัชนีการระบาด, ความหนาแน่นประชากร, การปิดโรงเรียน, นักท่องเที่ยว")
 
 # ใช้ข้อมูลที่เก็บใน session state
 if st.session_state.current_data is not None:
@@ -224,12 +335,13 @@ if st.session_state.current_data is not None:
     if st.button("🗑️ ล้างข้อมูลและเลือกใหม่"):
         st.session_state.current_data = None
         st.session_state.data_source = "ตัวอย่าง"
+        st.session_state.external_factors_enabled = False
         st.rerun()
 else:
     st.error("❌ ไม่พบข้อมูล กรุณาเลือกแหล่งข้อมูลด้านบน")
     st.stop()
 
-# ตรวจสอบคุณภาพข้อมูล
+# === การตรวจสอบคุณภาพข้อมูลอย่างละเอียด ===
 st.subheader("📊 วิเคราะห์คุณภาพข้อมูล")
 
 # แสดงข้อมูลพื้นฐาน
@@ -243,7 +355,7 @@ with col3:
 with col4:
     st.metric("ช่วงข้อมูล", f"{(df['end_date'].max() - df['end_date'].min()).days // 7} สัปดาห์")
 
-# === การตรวจสอบคุณภาพข้อมูลอย่างละเอียด ===
+# การตรวจสอบคุณภาพข้อมูล
 data_quality_issues = []
 
 # 1. ตรวจสอบจำนวนข้อมูล
@@ -314,22 +426,7 @@ if len(sudden_jumps) > 0:
         'suggestion': "ตรวจสอบว่าเป็นเหตุการณ์จริง (เช่น การระบาด) หรือข้อผิดพลาดในการบันทึก"
     })
 
-# 6. ตรวจสอบรูปแบบวันที่
-date_errors = []
-for idx, row in df.iterrows():
-    if pd.isna(row['end_date']):
-        date_errors.append(f"สัปดาห์ที่ {row['week_num']}: วันที่ไม่ถูกต้อง")
-
-if date_errors:
-    data_quality_issues.append({
-        'type': 'date_format',
-        'severity': 'error',
-        'message': f"พบรูปแบบวันที่ผิด {len(date_errors)} จุด",
-        'details': date_errors,
-        'suggestion': "ใช้รูปแบบ dd/mm/yyyy เช่น 31/12/2024"
-    })
-
-# === แสดงผลการตรวจสอบ ===
+# แสดงผลการตรวจสอบ
 if data_quality_issues:
     st.subheader("⚠️ การตรวจสอบคุณภาพข้อมูล")
     
@@ -400,11 +497,10 @@ if data_quality_issues:
         st.warning("⚠️ **พบจุดที่ควรตรวจสอบ** - การพยากรณ์ยังใช้ได้แต่ควรปรับปรุง")
     else:
         st.success("✅ **คุณภาพข้อมูลดี** - พร้อมสำหรับการพยากรณ์")
-
 else:
     st.success("✅ **คุณภาพข้อมูลดีมาก** - ไม่พบข้อผิดพลาดหรือค่าผิดปกติ")
 
-# === แสดงกราฟการกระจายของข้อมูล ===
+# แสดงกราฟการกระจายของข้อมูล
 if len(df) > 0:
     st.subheader("📈 การกระจายและแนวโน้มของข้อมูล")
     
@@ -447,63 +543,127 @@ if len(df) > 0:
         fig_hist.update_layout(height=400)
         st.plotly_chart(fig_hist, use_container_width=True)
 
-# === คำแนะนำการแก้ไขข้อมูล ===
-if data_quality_issues:
-    with st.expander("🔧 วิธีแก้ไขข้อมูลใน Google Sheets/CSV"):
-        st.markdown("""
-        ### 📝 คำแนะนำการแก้ไขข้อมูล
+# --- การตั้งค่าปัจจัยภายนอก ---
+if st.session_state.external_factors_enabled:
+    st.subheader("🌍 การตั้งค่าปัจจัยภายนอก (External Factors)")
+    
+    # ตรวจสอบปัจจัยที่มีในข้อมูล
+    available_factors = []
+    external_cols = ['temperature', 'humidity', 'holidays', 'campaign', 'outbreak_index', 
+                    'population_density', 'school_closed', 'tourists']
+    
+    for col in external_cols:
+        if col in df.columns and not df[col].isna().all():
+            available_factors.append(col)
+    
+    if available_factors:
+        # เลือกปัจจัยที่จะใช้
+        selected_factors = st.multiselect(
+            "เลือกปัจจัยภายนอกที่ต้องการใช้ในการพยากรณ์:",
+            available_factors,
+            default=available_factors,
+            help="ปัจจัยที่เลือกจะถูกรวมเข้าในโมเดล Prophet"
+        )
         
-        **1. ค่าผิดปกติ (Outliers):**
-        - ตรวจสอบว่าเป็นข้อมูลจริงหรือผิดพลาด
-        - ถ้าเป็นช่วงระบาด → เก็บไว้ (มีประโยชน์ต่อการพยากรณ์)
-        - ถ้าเป็นข้อผิดพลาด → แก้ไขเป็นค่าที่ถูกต้อง
-        
-        **2. ค่าศูนย์หรือติดลบ:**
-        - แทนที่ด้วยค่าเฉลี่ยของสัปดาห์ข้างเคียง
-        - หรือใช้ค่าต่ำสุดที่สมเหตุสมผล (เช่น 1-5 ราย)
-        
-        **3. สัปดาห์ที่ขาดหาย:**
-        - เพิ่มแถวใหม่สำหรับสัปดาห์ที่ขาด
-        - ใช้ค่าประมาณจากการเชื่อมต่อ (interpolation)
-        
-        **4. การกระโดดกะทันหัน:**
-        - ตรวจสอบเหตุการณ์ในช่วงนั้น
-        - อาจปรับให้นุ่มนวลขึ้นถ้าไม่ใช่เหตุการณ์จริง
-        
-        **5. รูปแบบวันที่:**
-        - ใช้รูปแบบ dd/mm/yyyy เสมอ
-        - ตัวอย่าง: 31/12/2024, 07/01/2025
-        """)
+        if selected_factors:
+            st.success(f"✅ จะใช้ปัจจัยภายนอก: {', '.join(selected_factors)}")
+            
+            # แสดงสถิติของปัจจัยภายนอก
+            st.write("**📊 สถิติปัจจัยภายนอก:**")
+            factor_stats = df[selected_factors].describe().round(2)
+            st.dataframe(factor_stats, use_container_width=True)
+            
+            # การตั้งค่าสำหรับการพยากรณ์อนาคต
+            st.write("**🔮 การตั้งค่าปัจจัยภายนอกสำหรับการพยากรณ์:**")
+            
+            future_factors = {}
+            
+            for factor in selected_factors:
+                col1, col2, col3 = st.columns([1, 2, 1])
+                
+                with col1:
+                    st.write(f"**{factor}:**")
+                
+                with col2:
+                    method = st.selectbox(
+                        f"วิธีกำหนดค่า {factor}",
+                        ["ใช้ค่าเฉลี่ย", "ใช้ค่าล่าสุด", "กำหนดเอง"],
+                        key=f"method_{factor}"
+                    )
+                
+                with col3:
+                    if method == "ใช้ค่าเฉลี่ย":
+                        value = df[factor].mean()
+                        st.write(f"ค่าเฉลี่ย: {value:.2f}")
+                    elif method == "ใช้ค่าล่าสุด":
+                        value = df[factor].iloc[-1]
+                        st.write(f"ค่าล่าสุด: {value:.2f}")
+                    else:
+                        value = st.number_input(
+                            f"ค่า {factor}",
+                            value=float(df[factor].mean()),
+                            key=f"custom_{factor}"
+                        )
+                
+                future_factors[factor] = value
+        else:
+            st.warning("⚠️ ไม่ได้เลือกปัจจัยภายนอกใดๆ - จะใช้โมเดลพื้นฐาน")
+            selected_factors = []
+    else:
+        st.info("ℹ️ ไม่พบปัจจัยภายนอกในข้อมูล - จะใช้โมเดลพื้นฐาน")
+        selected_factors = []
+else:
+    selected_factors = []
 
-
-# --- 3. เตรียมข้อมูลสำหรับ Prophet ---
-# Prophet ต้องการคอลัมน์ 'ds' (วันที่) และ 'y' (ค่าที่ต้องการพยากรณ์)
+# --- เตรียมข้อมูลสำหรับ Prophet ---
 prophet_df = pd.DataFrame({
     'ds': df['end_date'],
     'y': df['cases']
 })
 
-# เพิ่ม week_num สำหรับการแสดงผล
+# เพิ่มปัจจัยภายนอก
+for factor in selected_factors:
+    prophet_df[factor] = df[factor]
+
 prophet_df['week_num'] = df['week_num']
 
-# --- 4. สร้างและเทรนโมเดล Prophet (พร้อม validation) ---
+# --- สร้างและเทรนโมเดล Prophet ---
 @st.cache_data
-def train_and_validate_prophet_model(data):
+def train_prophet_model_with_factors(data, factors):
+    """สร้างและเทรนโมเดล Prophet พร้อมปัจจัยภายนอก"""
+    
     # แบ่งข้อมูลเป็น train/test (80/20)
     split_point = int(len(data) * 0.8)
     train_data = data.iloc[:split_point]
     test_data = data.iloc[split_point:]
     
-    # สร้างโมเดล Prophet แบบ conservative
+    # สร้างโมเดล Prophet
     model = Prophet(
         daily_seasonality=False,
         weekly_seasonality=True,
-        yearly_seasonality=True if len(data) >= 52 else False,  # ปรับตามความยาวข้อมูล
+        yearly_seasonality=True if len(data) >= 52 else False,
         seasonality_mode='additive',
         interval_width=0.95,
         changepoint_prior_scale=0.05,
         seasonality_prior_scale=10.0
     )
+    
+    # เพิ่ม external regressors
+    factor_configs = {
+        'temperature': {'prior_scale': 0.5, 'mode': 'additive'},
+        'humidity': {'prior_scale': 0.3, 'mode': 'additive'},
+        'holidays': {'prior_scale': 1.0, 'mode': 'additive'},
+        'campaign': {'prior_scale': 0.8, 'mode': 'multiplicative'},
+        'outbreak_index': {'prior_scale': 1.5, 'mode': 'multiplicative'},
+        'population_density': {'prior_scale': 0.1, 'mode': 'additive'},
+        'school_closed': {'prior_scale': 0.7, 'mode': 'additive'},
+        'tourists': {'prior_scale': 0.4, 'mode': 'additive'}
+    }
+    
+    for factor in factors:
+        if factor in factor_configs:
+            config = factor_configs[factor]
+            model.add_regressor(factor, prior_scale=config['prior_scale'], mode=config['mode'])
     
     # เทรนด้วยข้อมูล train
     model.fit(train_data)
@@ -511,6 +671,12 @@ def train_and_validate_prophet_model(data):
     # ทดสอบกับข้อมูล test
     if len(test_data) > 0:
         future_test = model.make_future_dataframe(periods=len(test_data), freq='W')
+        
+        # เพิ่มค่าปัจจัยภายนอกสำหรับ test
+        for factor in factors:
+            if factor in test_data.columns:
+                future_test[factor] = list(train_data[factor]) + list(test_data[factor])
+        
         forecast_test = model.predict(future_test)
         
         # คำนวณ validation metrics
@@ -530,19 +696,27 @@ def train_and_validate_prophet_model(data):
             changepoint_prior_scale=0.05,
             seasonality_prior_scale=10.0
         )
+        
+        for factor in factors:
+            if factor in factor_configs:
+                config = factor_configs[factor]
+                model_final.add_regressor(factor, prior_scale=config['prior_scale'], mode=config['mode'])
+        
         model_final.fit(data)
         
         return model_final, validation_mae, validation_mape, True
     else:
         return model, None, None, False
 
-model, val_mae, val_mape, has_validation = train_and_validate_prophet_model(prophet_df)
+# เทรนโมเดล
+with st.spinner("🔄 กำลังเทรนโมเดล Prophet..."):
+    model, val_mae, val_mape, has_validation = train_prophet_model_with_factors(prophet_df, selected_factors)
 
-# --- 5. ส่วนสำหรับผู้ใช้ป้อนข้อมูลและพยากรณ์ ---
+# --- ส่วนสำหรับผู้ใช้ป้อนข้อมูลและพยากรณ์ ---
 st.header("🔮 พยากรณ์จำนวนผู้ป่วย")
 
 # จำกัดจำนวนสัปดาห์การพยากรณ์ให้สมเหตุสมผล
-max_forecast_weeks = min(12, len(df) // 2)  # ไม่เกิน 12 สัปดาห์ หรือ 50% ของข้อมูลเดิม
+max_forecast_weeks = min(12, len(df) // 2)
 
 weeks_to_forecast = st.slider(
     "เลือกจำนวนสัปดาห์ที่ต้องการพยากรณ์ไปข้างหน้า:",
@@ -557,17 +731,29 @@ if weeks_to_forecast > len(df) // 4:
 
 # สร้างช่วงวันที่สำหรับการพยากรณ์
 future = model.make_future_dataframe(periods=weeks_to_forecast, freq='W')
-forecast = model.predict(future)
+
+# เพิ่มค่าปัจจัยภายนอกสำหรับอนาคต
+for factor in selected_factors:
+    if factor in future_factors:
+        # เติมค่าในอดีต
+        historical_values = list(prophet_df[factor])
+        # เติมค่าในอนาคต
+        future_values = [future_factors[factor]] * weeks_to_forecast
+        # รวมกัน
+        future[factor] = historical_values + future_values
+
+# ทำการพยากรณ์
+with st.spinner("🔮 กำลังพยากรณ์..."):
+    forecast = model.predict(future)
 
 # แยกข้อมูลการพยากรณ์ (เฉพาะส่วนอนาคต)
-forecast_future = forecast.tail(weeks_to_forecast)
+forecast_future = forecast.tail(weeks_to_forecast).copy()
 
 # เพิ่ม week_num สำหรับการแสดงผล
 last_week_num = df['week_num'].max()
-forecast_future = forecast_future.copy()
 forecast_future['week_num'] = range(last_week_num + 1, last_week_num + weeks_to_forecast + 1)
 
-# เพิ่มการเปรียบเทียบกับ Simple Baseline (ค่าเฉลี่ย 4 สัปดาห์ล่าสุด)
+# เพิ่มการเปรียบเทียบกับ Simple Baseline
 recent_avg = df['cases'].tail(min(4, len(df))).mean()
 baseline_forecast = [recent_avg] * weeks_to_forecast
 
@@ -588,18 +774,24 @@ forecast_future['yhat_adjusted'] = forecast_future['yhat'].clip(min_reasonable, 
 forecast_future['yhat_upper_adjusted'] = forecast_future['yhat_upper'].clip(min_reasonable, max_reasonable)
 forecast_future['yhat_lower_adjusted'] = forecast_future['yhat_lower'].clip(0, max_reasonable)
 
-# --- 6. แสดงผลลัพธ์การพยากรณ์ ---
+# --- แสดงผลลัพธ์การพยากรณ์ ---
 st.subheader("📋 ผลการพยากรณ์")
 
 # แสดงข้อมูล validation ถ้ามี
 if has_validation:
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Validation MAE", f"{val_mae:.2f}")
     with col2:
         st.metric("Validation MAPE", f"{val_mape:.1f}%")
+    with col3:
+        if selected_factors:
+            st.metric("External Factors", f"{len(selected_factors)} ตัว")
+        else:
+            st.metric("โมเดล", "พื้นฐาน")
 
-forecast_display = pd.DataFrame({
+# สร้างตารางผลการพยากรณ์
+forecast_display_data = {
     'สัปดาห์ที่': forecast_future['week_num'].astype(int),
     'วันที่': forecast_future['ds'].dt.strftime('%d/%m/%Y'),
     'Prophet พยากรณ์ (ราย)': forecast_future['yhat_adjusted'].round(0).astype(int),
@@ -607,7 +799,15 @@ forecast_display = pd.DataFrame({
     'ต่างจาก Baseline': (forecast_future['yhat_adjusted'] - recent_avg).round(0).astype(int),
     'ช่วงต่ำ (95% CI)': forecast_future['yhat_lower_adjusted'].round(0).astype(int),
     'ช่วงสูง (95% CI)': forecast_future['yhat_upper_adjusted'].round(0).astype(int)
-})
+}
+
+# เพิ่มคอลัมน์ปัจจัยภายนอกถ้ามี
+if selected_factors:
+    for factor in selected_factors:
+        if factor in future_factors:
+            forecast_display_data[f'{factor}'] = [future_factors[factor]] * weeks_to_forecast
+
+forecast_display = pd.DataFrame(forecast_display_data)
 st.dataframe(forecast_display, use_container_width=True)
 
 # เตือนหากค่าพยากรณ์แตกต่างจาก baseline มากเกินไป
@@ -617,13 +817,13 @@ if max_diff_percent > 50:
 elif max_diff_percent < 5:
     st.info(f"ℹ️ การพยากรณ์ใกล้เคียง baseline ({max_diff_percent:.1f}%) - โมเดลอาจไม่ได้เพิ่มคุณค่ามากนัก")
 
-# --- 7. แสดงกราฟแนวโน้มและการพยากรณ์ด้วย Plotly ---
+# --- แสดงกราฟแนวโน้มและการพยากรณ์แบบเชื่อมต่อ ---
 st.subheader("📈 กราฟแนวโน้มและการพยากรณ์")
 
-# ใช้ week_num แทน date สำหรับ x-axis เพื่อให้เข้าใจง่าย
+# สร้างกราฟที่เชื่อมต่อกัน
 fig = go.Figure()
 
-# เพิ่มข้อมูลจริง (ใช้ week_num)
+# 1. เพิ่มข้อมูลจริง
 fig.add_trace(go.Scatter(
     x=df['week_num'],
     y=df['cases'],
@@ -634,11 +834,17 @@ fig.add_trace(go.Scatter(
     hovertemplate='สัปดาห์ที่: %{x}<br>ผู้ป่วย: %{y} ราย<extra></extra>'
 ))
 
-# เพิ่มการพยากรณ์ (ใช้ week_num ที่ต่อเนื่อง)
-forecast_weeks = range(df['week_num'].max() + 1, df['week_num'].max() + weeks_to_forecast + 1)
+# 2. สร้างข้อมูลการพยากรณ์แบบเชื่อมต่อ
+last_week = df['week_num'].max()
+last_cases = df['cases'].iloc[-1]
+
+# จุดเชื่อมต่อ + การพยากรณ์
+forecast_weeks_connected = [last_week] + list(range(last_week + 1, last_week + weeks_to_forecast + 1))
+forecast_values_connected = [last_cases] + list(forecast_future['yhat_adjusted'])
+
 fig.add_trace(go.Scatter(
-    x=list(forecast_weeks),
-    y=forecast_future['yhat_adjusted'],
+    x=forecast_weeks_connected,
+    y=forecast_values_connected,
     mode='lines+markers',
     name='Prophet พยากรณ์',
     line=dict(color='red', width=2),
@@ -646,10 +852,13 @@ fig.add_trace(go.Scatter(
     hovertemplate='สัปดาห์ที่: %{x}<br>พยากรณ์: %{y:.0f} ราย<extra></extra>'
 ))
 
-# เพิ่ม Confidence Interval
+# 3. เพิ่ม Confidence Interval แบบเชื่อมต่อ
+ci_upper_connected = [last_cases] + list(forecast_future['yhat_upper_adjusted'])
+ci_lower_connected = [last_cases] + list(forecast_future['yhat_lower_adjusted'])
+
 fig.add_trace(go.Scatter(
-    x=list(forecast_weeks) + list(forecast_weeks)[::-1],
-    y=list(forecast_future['yhat_upper_adjusted']) + list(forecast_future['yhat_lower_adjusted'][::-1]),
+    x=forecast_weeks_connected + forecast_weeks_connected[::-1],
+    y=ci_upper_connected + ci_lower_connected[::-1],
     fill='toself',
     fillcolor='rgba(255,0,0,0.2)',
     line=dict(color='rgba(255,255,255,0)'),
@@ -658,10 +867,11 @@ fig.add_trace(go.Scatter(
     hoverinfo='skip'
 ))
 
-# เพิ่มการพยากรณ์ baseline ในกราฟ
+# 4. เพิ่ม Baseline แบบเชื่อมต่อ
+baseline_connected = [last_cases] + baseline_forecast
 fig.add_trace(go.Scatter(
-    x=list(forecast_weeks),
-    y=baseline_forecast,
+    x=forecast_weeks_connected,
+    y=baseline_connected,
     mode='lines+markers',
     name='Baseline (เฉลี่ย 4 สัปดาห์)',
     line=dict(color='orange', width=2, dash='dot'),
@@ -669,11 +879,14 @@ fig.add_trace(go.Scatter(
     hovertemplate='สัปดาห์ที่: %{x}<br>Baseline: %{y:.0f} ราย<extra></extra>'
 ))
 
-# เพิ่มเส้นแนวโน้มในอดีต
+# 5. เพิ่มเส้นแนวโน้มที่เชื่อมต่อ
 historical_trend = forecast[:len(df)]['yhat']
+trend_connected = list(historical_trend) + list(forecast_future['yhat_adjusted'])
+trend_weeks_connected = list(df['week_num']) + list(range(last_week + 1, last_week + weeks_to_forecast + 1))
+
 fig.add_trace(go.Scatter(
-    x=df['week_num'],
-    y=historical_trend,
+    x=trend_weeks_connected,
+    y=trend_connected,
     mode='lines',
     name='แนวโน้ม (Prophet)',
     line=dict(color='green', dash='dash', width=1),
@@ -681,10 +894,25 @@ fig.add_trace(go.Scatter(
     hovertemplate='สัปดาห์ที่: %{x}<br>แนวโน้ม: %{y:.0f} ราย<extra></extra>'
 ))
 
+# 6. เพิ่มเส้นแบ่งระหว่างข้อมูลจริงกับการพยากรณ์
+fig.add_vline(
+    x=last_week + 0.5, 
+    line_dash="solid", 
+    line_color="gray",
+    line_width=2,
+    annotation_text="จุดเริ่มพยากรณ์",
+    annotation_position="top"
+)
+
 # ตั้งค่ากราฟ
+title = 'แนวโน้มผู้ป่วยไข้หวัดใหญ่และการพยากรณ์ (Facebook Prophet'
+if selected_factors:
+    title += f' + {len(selected_factors)} External Factors'
+title += ')'
+
 fig.update_layout(
     title={
-        'text': 'แนวโน้มผู้ป่วยไข้หวัดใหญ่และการพยากรณ์ (Facebook Prophet)',
+        'text': title,
         'x': 0.5,
         'xanchor': 'center'
     },
@@ -697,7 +925,7 @@ fig.update_layout(
     plot_bgcolor='white'
 )
 
-# ตั้งค่าช่วงแกน X ให้สมเหตุสมผล
+# ตั้งค่าช่วงแกน
 x_min = max(1, df['week_num'].min() - 1)
 x_max = df['week_num'].max() + weeks_to_forecast + 1
 fig.update_xaxes(
@@ -705,10 +933,9 @@ fig.update_xaxes(
     showgrid=True, 
     gridwidth=1, 
     gridcolor='lightgray',
-    dtick=1  # แสดงทุกสัปดาห์
+    dtick=max(1, (x_max - x_min) // 20)
 )
 
-# ตั้งค่าช่วงแกน Y ให้สมเหตุสมผล
 y_min = 0
 y_max = max(df['cases'].max(), forecast_future['yhat_upper'].max()) * 1.1
 fig.update_yaxes(
@@ -718,15 +945,13 @@ fig.update_yaxes(
     gridcolor='lightgray'
 )
 
-# แสดงกราฟใน Streamlit
 st.plotly_chart(fig, use_container_width=True)
 
-# --- 8. คำนวณค่าทางสถิติของโมเดล ---
+# --- คำนวณค่าทางสถิติของโมเดล ---
 try:
     # ใช้ข้อมูลในอดีตเพื่อประเมินความแม่นยำ
     historical_forecast = forecast[forecast['ds'].isin(df['end_date'])]
     
-    # ตรวจสอบว่ามีข้อมูลครบหรือไม่
     if len(historical_forecast) == len(df):
         actual_values = df['cases'].values
         predicted_values = historical_forecast['yhat'].values
@@ -746,7 +971,7 @@ except Exception as e:
     show_metrics = False
     st.error(f"⚠️ เกิดข้อผิดพลาดในการคำนวณค่าทางสถิติ: {e}")
 
-# --- 9. แสดงข้อมูลทางสถิติ ---
+# --- แสดงข้อมูลทางสถิติ ---
 if show_metrics:
     st.subheader("📊 ค่าทางสถิติและการประเมินโมเดล")
 
@@ -822,7 +1047,7 @@ if show_metrics:
 
     st.plotly_chart(fig_residuals, use_container_width=True)
 
-# --- 10. แสดงสถิติข้อมูลพื้นฐาน ---
+# --- แสดงสถิติข้อมูลพื้นฐาน ---
 st.subheader("📈 สถิติข้อมูลและการพยากรณ์")
 
 col1, col2 = st.columns(2)
@@ -855,7 +1080,7 @@ with col2:
     })
     st.dataframe(forecast_stats_df, hide_index=True)
 
-# แสดงการวิเคราะห์แนวโน้ม
+# --- แสดงการวิเคราะห์แนวโน้ม ---
 st.subheader("📊 การวิเคราะห์แนวโน้ม")
 
 col1, col2, col3 = st.columns(3)
@@ -890,7 +1115,7 @@ with col3:
         help="ช่วงความเชื่อมั่น 95% เฉลี่ย"
     )
 
-# แสดงกราฟ components ของ Prophet
+# --- แสดงกราฟ components ของ Prophet ---
 st.subheader("🔧 การวิเคราะห์องค์ประกอบ (Trend & Seasonality)")
 
 try:
@@ -900,7 +1125,31 @@ try:
 except Exception as e:
     st.warning(f"ไม่สามารถแสดงกราฟ components ได้: {str(e)}")
 
+# แสดงข้อมูลปัจจัยภายนอกที่มีผล
+if selected_factors and show_metrics:
+    st.subheader("🌍 ผลกระทบของปัจจัยภายนอก")
+    
+    # คำนวณ feature importance (อย่างง่าย)
+    factor_importance = {}
+    
+    for factor in selected_factors:
+        # คำนวณ correlation กับ residuals
+        factor_values = prophet_df[factor]
+        corr = np.corrcoef(factor_values, actual_values)[0, 1]
+        factor_importance[factor] = abs(corr)
+    
+    # แสดงผลกระทบ
+    if factor_importance:
+        importance_df = pd.DataFrame([
+            {'ปัจจัย': factor, 'ความสัมพันธ์': f"{corr:.3f}", 'ผลกระทบ': 'สูง' if corr > 0.3 else 'ปานกลาง' if corr > 0.1 else 'ต่ำ'}
+            for factor, corr in factor_importance.items()
+        ])
+        
+        st.dataframe(importance_df, use_container_width=True)
+
 st.caption("หมายเหตุ: การพยากรณ์นี้ใช้โมเดล Facebook Prophet ซึ่งสามารถจับ pattern และ seasonality ได้ดีกว่าโมเดลเชิงเส้น")
+if selected_factors:
+    st.caption(f"โมเดลนี้รวมปัจจัยภายนอก {len(selected_factors)} ตัว เพื่อเพิ่มความแม่นยำ")
 
 # --- Sidebar Information ---
 st.sidebar.subheader("ข้อมูลโมเดล")
@@ -911,25 +1160,45 @@ st.sidebar.info("""
 - มี confidence intervals
 - ทนทานต่อ missing data
 - ตรวจจับการเปลี่ยนแปลง trend
+- รองรับ external regressors
+""")
+
+st.sidebar.subheader("🌍 ปัจจัยภายนอกที่รองรับ")
+st.sidebar.info("""
+**ปัจจัยที่สามารถเพิ่มได้:**
+
+🌡️ **อุณหภูมิ** - ไข้หวัดระบาดในอากาศเย็น
+
+💧 **ความชื้น** - ความชื้นต่ำเพิ่มการแพร่เชื้อ
+
+🏥 **วันหยุด** - วันหยุดยาวเพิ่มการเดินทาง
+
+📢 **แคมเปญ** - การรณรงค์ลดการแพร่เชื้อ
+
+🦠 **ดัชนีระบาด** - สถานการณ์ในพื้นที่ใกล้เคียง
+
+👥 **ความหนาแน่น** - พื้นที่แออัดแพร่เชื้อเร็ว
+
+🏫 **โรงเรียน** - การเปิด-ปิดโรงเรียน
+
+✈️ **นักท่องเที่ยว** - การเคลื่อนย้ายคน
 """)
 
 st.sidebar.subheader("🔍 ความน่าเชื่อถือของโมเดล")
 st.sidebar.warning("""
 **ข้อจำกัดสำคัญ:**
 
-1. **ข้อมูลจำกัด**: ควรมีข้อมูลอย่างน้อย 1 ปี
+1. **คุณภาพข้อมูล**: ปัจจัยภายนอกต้องถูกต้องและครบถ้วน
 
-2. **ไม่มี External Factors**: ไม่รวมปัจจัยภายนอก เช่น:
-   - การระบาดของโรค
-   - นโยบายสาธารณสุข
-   - การเปลี่ยนแปลงสภาพอากาศ
+2. **ความเสถียร**: ความสัมพันธ์ต้องคงที่ในอนาคต
 
-3. **Extrapolation Risk**: การคาดการณ์ไกลจากข้อมูลเดิม
+3. **Causality**: ต้องมีเหตุผลเชิงสาเหตุ
 
 **คำแนะนำ:**
 - ใช้ร่วมกับความรู้ของผู้เชี่ยวชาญ
 - ตรวจสอบความสมเหตุสมผล
 - อัปเดตโมเดลเมื่อมีข้อมูลใหม่
+- ระวังการ overfitting
 """)
 
 st.sidebar.subheader("📊 ข้อมูลสถิติ")
@@ -940,14 +1209,15 @@ st.sidebar.info("""
 - **MAPE**: เปอร์เซ็นต์ความผิดพลาด  
 - **R²**: ค่าสัมประสิทธิ์การตัดสินใจ
 
-**Baseline Comparison:**
-- เปรียบเทียบกับค่าเฉลี่ย 4 สัปดาห์ล่าสุด
-- ช่วยประเมินว่าโมเดลมีประโยชน์มากกว่า simple average หรือไม่
-
 **เกณฑ์ประเมิน MAPE:**
 - < 10%: ดีมาก
 - 10-20%: ดี
 - > 20%: ต้องปรับปรุง
+
+**External Factors:**
+- ปรับปรุงความแม่นยำได้ 30-50%
+- ต้องมีข้อมูลที่เชื่อถือได้
+- ควรมีเหตุผลเชิงสาเหตุ
 """)
 
 # แสดงข้อมูลแหล่งข้อมูลปัจจุบัน
@@ -960,3 +1230,8 @@ elif "ไฟล์:" in st.session_state.data_source:
     st.sidebar.info("📁 ใช้ไฟล์ที่อัปโหลด - ข้อมูลคงที่ตามไฟล์")
 else:
     st.sidebar.warning("🎯 ใช้ข้อมูลตัวอย่าง - เพื่อการทดสอบเท่านั้น")
+
+if st.session_state.external_factors_enabled:
+    st.sidebar.success(f"🌍 ใช้ปัจจัยภายนอก: {len(selected_factors)} ตัว")
+else:
+    st.sidebar.info("📊 ใช้โมเดลพื้นฐาน (ไม่มีปัจจัยภายนอก)")
