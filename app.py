@@ -53,8 +53,8 @@ if data_source == "📊 Google Sheets (แนะนำ)":
            ```
         3. **(เสริม)** เพิ่มปัจจัยภายนอก:
            ```
-           D1: temperature  E1: humidity  F1: holidays  G1: campaign
-           D2: 25.5         E2: 75        F2: 0         G2: 0
+           D1: temperature  E1: humidity  F1: holiday_flag  G1: campaign
+           D2: 25.5         E2: 75        F2: 0             G2: 0
            ```
         
         **ขั้นตอนที่ 2: แชร์ Google Sheets**
@@ -62,6 +62,8 @@ if data_source == "📊 Google Sheets (แนะนำ)":
         2. เปลี่ยน "Restricted" เป็น **"Anyone with the link"**
         3. ตั้งสิทธิ์เป็น **"Viewer"** หรือ **"Editor"**
         4. คลิก "Copy link"
+        
+        **หมายเหตุ:** ใช้ 'holiday_flag' แทน 'holidays' เพื่อหลีกเลี่ยงปัญหากับ Prophet
         """)
     
     # ตัวอย่าง URL
@@ -99,9 +101,15 @@ if data_source == "📊 Google Sheets (แนะนำ)":
                             df_sheets['cases'] = pd.to_numeric(df_sheets['cases'], errors='coerce')
                             df_sheets['week_num'] = pd.to_numeric(df_sheets['week_num'], errors='coerce')
                             
-                            # ทำความสะอาดข้อมูลปัจจัยภายนอก (ถ้ามี)
-                            external_cols = ['temperature', 'humidity', 'holidays', 'campaign', 'outbreak_index', 
+                            # ทำความสะอาดข้อมูลปัจจัยภายนอก (แก้ไขชื่อคอลัมน์)
+                            external_cols = ['temperature', 'humidity', 'holiday_flag', 'campaign', 'outbreak_index', 
                                            'population_density', 'school_closed', 'tourists']
+                            
+                            # รองรับทั้ง 'holidays' และ 'holiday_flag' 
+                            if 'holidays' in df_sheets.columns and 'holiday_flag' not in df_sheets.columns:
+                                df_sheets['holiday_flag'] = df_sheets['holidays']
+                                df_sheets.drop('holidays', axis=1, inplace=True)
+                                st.info("ℹ️ แปลงคอลัมน์ 'holidays' เป็น 'holiday_flag' แล้ว")
                             
                             for col in external_cols:
                                 if col in df_sheets.columns:
@@ -169,11 +177,13 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
         
         **คอลัมน์ปัจจัยภายนอก (เสริม):**
         ```csv
-        end_date,cases,week_num,temperature,humidity,holidays,campaign
+        end_date,cases,week_num,temperature,humidity,holiday_flag,campaign
         07/01/2024,120,1,25.5,75,0,0
         14/01/2024,135,2,23.2,82,1,0
         21/01/2024,98,3,28.1,68,0,1
         ```
+        
+        **หมายเหตุ:** ใช้ 'holiday_flag' แทน 'holidays' เพื่อหลีกเลี่ยงปัญหากับ Prophet
         """)
     
     uploaded_file = st.file_uploader(
@@ -199,9 +209,15 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
                 df_uploaded['cases'] = pd.to_numeric(df_uploaded['cases'], errors='coerce')
                 df_uploaded['week_num'] = pd.to_numeric(df_uploaded['week_num'], errors='coerce')
                 
-                # ทำความสะอาดข้อมูลปัจจัยภายนอก
-                external_cols = ['temperature', 'humidity', 'holidays', 'campaign', 'outbreak_index', 
+                # ทำความสะอาดข้อมูลปัจจัยภายนอก (แก้ไขชื่อคอลัมน์)
+                external_cols = ['temperature', 'humidity', 'holiday_flag', 'campaign', 'outbreak_index', 
                                'population_density', 'school_closed', 'tourists']
+                
+                # รองรับทั้ง 'holidays' และ 'holiday_flag'
+                if 'holidays' in df_uploaded.columns and 'holiday_flag' not in df_uploaded.columns:
+                    df_uploaded['holiday_flag'] = df_uploaded['holidays']
+                    df_uploaded.drop('holidays', axis=1, inplace=True)
+                    st.info("ℹ️ แปลงคอลัมน์ 'holidays' เป็น 'holiday_flag' แล้ว")
                 
                 for col in external_cols:
                     if col in df_uploaded.columns:
@@ -279,7 +295,7 @@ else:  # ข้อมูลตัวอย่าง
         # เพิ่มปัจจัยภายนอก
         temperatures = []
         humidities = []
-        holidays = []
+        holiday_flags = []  # เปลี่ยนจาก holidays เป็น holiday_flags
         campaigns = []
         
         for i, date in enumerate(dates):
@@ -294,7 +310,7 @@ else:  # ข้อมูลตัวอย่าง
             
             # วันหยุด (สุ่มบางสัปดาห์)
             holiday = 1 if week_of_year in [1, 2, 13, 14, 31, 32, 52] else 0
-            holidays.append(holiday)
+            holiday_flags.append(holiday)
             
             # แคมเปญ (บางช่วง)
             campaign = 1 if week_of_year in range(20, 25) or week_of_year in range(45, 50) else 0
@@ -306,7 +322,7 @@ else:  # ข้อมูลตัวอย่าง
             'week_num': range(1, len(dates) + 1),
             'temperature': temperatures,
             'humidity': humidities,
-            'holidays': holidays,
+            'holiday_flag': holiday_flags,  # เปลี่ยนจาก holidays
             'campaign': campaigns,
             'outbreak_index': np.random.uniform(0.1, 0.8, len(dates)).round(2),
             'population_density': [1250] * len(dates),
@@ -549,7 +565,7 @@ if st.session_state.external_factors_enabled:
     
     # ตรวจสอบปัจจัยที่มีในข้อมูล
     available_factors = []
-    external_cols = ['temperature', 'humidity', 'holidays', 'campaign', 'outbreak_index', 
+    external_cols = ['temperature', 'humidity', 'holiday_flag', 'campaign', 'outbreak_index', 
                     'population_density', 'school_closed', 'tourists']
     
     for col in external_cols:
@@ -627,8 +643,39 @@ for factor in selected_factors:
 
 prophet_df['week_num'] = df['week_num']
 
+# --- ฟังก์ชันเช็ค Prophet reserved names ---
+def get_prophet_reserved_names():
+    """ส่งคืนรายชื่อที่ Prophet จองไว้"""
+    return [
+        'ds', 'y', 't', 'trend', 'seasonal', 'seasonality', 
+        'holidays', 'holiday', 'mcmc_samples', 'uncertainty_samples',
+        'yhat', 'yhat_lower', 'yhat_upper', 'cap', 'floor',
+        'additive_terms', 'multiplicative_terms', 'extra_regressors'
+    ]
+
+def validate_regressor_names(factors):
+    """ตรวจสอบว่าชื่อปัจจัยไม่ใช่ reserved names"""
+    reserved_names = get_prophet_reserved_names()
+    invalid_names = [factor for factor in factors if factor in reserved_names]
+    
+    if invalid_names:
+        return False, invalid_names
+    return True, []
+
+# ตรวจสอบชื่อปัจจัยภายนอก
+if selected_factors:
+    is_valid, invalid_names = validate_regressor_names(selected_factors)
+    if not is_valid:
+        st.error(f"❌ **ชื่อปัจจัยต่อไปนี้เป็น reserved names ของ Prophet:** {', '.join(invalid_names)}")
+        st.info("💡 **แนวทางแก้ไข:** เปลี่ยนชื่อคอลัมน์ดังกล่าวในไฟล์ข้อมูลเป็นชื่ออื่น เช่น:")
+        for name in invalid_names:
+            if name == 'holidays':
+                st.write(f"- `{name}` → `holiday_flag` หรือ `is_holiday`")
+            else:
+                st.write(f"- `{name}` → `{name}_factor` หรือ `ext_{name}`")
+        st.stop()
+
 # --- สร้างและเทรนโมเดล Prophet ---
-@st.cache_data
 def train_prophet_model_with_factors(data, factors):
     """สร้างและเทรนโมเดล Prophet พร้อมปัจจัยภายนอก"""
     
@@ -652,7 +699,7 @@ def train_prophet_model_with_factors(data, factors):
     factor_configs = {
         'temperature': {'prior_scale': 0.5, 'mode': 'additive'},
         'humidity': {'prior_scale': 0.3, 'mode': 'additive'},
-        'holidays': {'prior_scale': 1.0, 'mode': 'additive'},
+        'holiday_flag': {'prior_scale': 1.0, 'mode': 'additive'},  # เปลี่ยนจาก holidays
         'campaign': {'prior_scale': 0.8, 'mode': 'multiplicative'},
         'outbreak_index': {'prior_scale': 1.5, 'mode': 'multiplicative'},
         'population_density': {'prior_scale': 0.1, 'mode': 'additive'},
@@ -664,6 +711,9 @@ def train_prophet_model_with_factors(data, factors):
         if factor in factor_configs:
             config = factor_configs[factor]
             model.add_regressor(factor, prior_scale=config['prior_scale'], mode=config['mode'])
+        else:
+            # ใช้ค่า default สำหรับปัจจัยที่ไม่ได้กำหนดไว้
+            model.add_regressor(factor, prior_scale=0.5, mode='additive')
     
     # เทรนด้วยข้อมูล train
     model.fit(train_data)
@@ -701,6 +751,8 @@ def train_prophet_model_with_factors(data, factors):
             if factor in factor_configs:
                 config = factor_configs[factor]
                 model_final.add_regressor(factor, prior_scale=config['prior_scale'], mode=config['mode'])
+            else:
+                model_final.add_regressor(factor, prior_scale=0.5, mode='additive')
         
         model_final.fit(data)
         
@@ -1172,6 +1224,7 @@ st.sidebar.info("""
 💧 **ความชื้น** - ความชื้นต่ำเพิ่มการแพร่เชื้อ
 
 🏥 **วันหยุด** - วันหยุดยาวเพิ่มการเดินทาง
+   (ใช้ชื่อ 'holiday_flag' แทน 'holidays')
 
 📢 **แคมเปญ** - การรณรงค์ลดการแพร่เชื้อ
 
@@ -1182,6 +1235,23 @@ st.sidebar.info("""
 🏫 **โรงเรียน** - การเปิด-ปิดโรงเรียน
 
 ✈️ **นักท่องเที่ยว** - การเคลื่อนย้ายคน
+""")
+
+st.sidebar.subheader("⚠️ Prophet Reserved Names")
+st.sidebar.warning("""
+**ชื่อที่ Prophet จองไว้:**
+
+❌ **ห้ามใช้เป็นชื่อคอลัมน์:**
+- holidays (ใช้ holiday_flag แทน)
+- trend, seasonal, seasonality
+- yhat, ds, y, t
+- cap, floor
+- uncertainty_samples
+
+✅ **ใช้ชื่อทดแทน:**
+- holidays → holiday_flag
+- seasonal → seasonal_factor  
+- trend → trend_data
 """)
 
 st.sidebar.subheader("🔍 ความน่าเชื่อถือของโมเดล")
