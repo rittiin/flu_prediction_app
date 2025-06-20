@@ -3,12 +3,12 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
-# --- เปลี่ยนจาก Matplotlib เป็น Plotly ---
+# --- Import Plotly Express ---
 import plotly.express as px
-import plotly.graph_objects as go # อาจจะไม่จำเป็นสำหรับกรณีนี้ แต่มีไว้เผื่อ
+import plotly.graph_objects as go # ไม่ได้ใช้โดยตรงในตัวอย่างนี้ แต่มีไว้เผื่อ
 
-# ไม่ต้อง import matplotlib.pyplot และ matplotlib.font_manager แล้ว
-# ไม่ต้องมีโค้ด plt.rcParams[...] หรือ fm._rebuild() แล้ว (นี่คือข้อดี!)
+# ไม่จำเป็นต้อง import matplotlib.pyplot และ matplotlib.font_manager แล้ว
+# ไม่ต้องมีโค้ด plt.rcParams[...] หรือ fm._rebuild() แล้ว
 
 # --- 1. ตั้งค่าหน้าเว็บ ---
 st.set_page_config(
@@ -26,20 +26,23 @@ try:
     df['end_date'] = pd.to_datetime(df['end_date'], format='%d/%m/%Y')
     st.subheader("ข้อมูลผู้ป่วยย้อนหลัง")
     st.dataframe(df)
-except FileNotFoundError:
-    st.error("ไม่พบไฟล์ 'flu_data.csv' กรุณาตรวจสอบว่าไฟล์อยู่ในไดเรกทอรีเดียวกันกับ 'app.py'")
-    st.stop()
+except Exception: # ใช้ Exception เพื่อจับข้อผิดพลาดทั่วไป เช่น การโหลดไฟล์ไม่ได้
+    st.error("ไม่สามารถโหลดไฟล์ข้อมูลได้ กรุณาตรวจสอบลิงก์หรือการเชื่อมต่ออินเทอร์เน็ต")
+    st.stop() # หยุดการทำงานถ้าไม่มีไฟล์ข้อมูล
 
 # --- 3. สร้างโมเดลพยากรณ์ (Linear Regression) ---
-X = df[['week_num']]
-y = df['cases']
+# เตรียมข้อมูลสำหรับโมเดล
+X = df[['week_num']] # ตัวแปรอิสระ (สัปดาห์ที่)
+y = df['cases']     # ตัวแปรตาม (จำนวนผู้ป่วย)
 
+# สร้างและฝึกโมเดล Linear Regression
 model = LinearRegression()
 model.fit(X, y)
 
 # --- 4. ส่วนสำหรับผู้ใช้ป้อนข้อมูลและพยากรณ์ ---
 st.header("พยากรณ์จำนวนผู้ป่วย")
 
+# ตัวรับ Input จากผู้ใช้
 weeks_to_forecast = st.slider(
     "เลือกจำนวนสัปดาห์ที่ต้องการพยากรณ์ไปข้างหน้า:",
     min_value=1,
@@ -47,9 +50,11 @@ weeks_to_forecast = st.slider(
     value=3
 )
 
+# คำนวณสัปดาห์ถัดไป
 last_week_num = df['week_num'].max()
 forecast_weeks_num = np.array([last_week_num + i for i in range(1, weeks_to_forecast + 1)]).reshape(-1, 1)
 
+# ทำการพยากรณ์
 predicted_cases = model.predict(forecast_weeks_num)
 
 # --- 5. แสดงผลลัพธ์การพยากรณ์ ---
@@ -82,37 +87,52 @@ trend_line_data = pd.DataFrame({
 # รวม DataFrame ทั้งหมดเข้าด้วยกัน
 combined_df = pd.concat([plot_data, trend_line_data], ignore_index=True)
 
-
 # สร้างกราฟด้วย Plotly Express
 # ใช้ color เพื่อแยกประเภทข้อมูล (ข้อมูลจริง, พยากรณ์, เส้นแนวโน้ม)
-# สร้างกราฟด้วย Plotly Express
 fig = px.line(
     combined_df,
-    x='สัปดาห์ที่',
+    x='สัปถาห์ที่',
     y='จำนวนผู้ป่วย (ราย)',
-    color='ประเภทข้อมูล',
+    color='ประเภทข้อมูล', # ใช้คอลัมน์นี้ในการแยกสีและสร้าง legend
     title='แนวโน้มผู้ป่วยไข้หวัดใหญ่และการพยากรณ์',
     labels={
         'สัปดาห์ที่': 'สัปดาห์ที่',
         'จำนวนผู้ป่วย (ราย)': 'จำนวนผู้ป่วย (ราย)',
-        'ประเภทข้อมูล': 'Legend'
+        'ประเภทข้อมูล': 'Legend' # ชื่อที่จะแสดงใน legend
     },
-    line_dash='ประเภทข้อมูล',
-    markers=True
+    line_dash='ประเภทข้อมูล', # ใช้ dash style เพื่อแยก
+    markers=True # แสดง marker
 )
 
-# ... (โค้ด update_traces) ...
+# ปรับแต่งสีและสไตล์ของเส้น
+# Plotly จะกำหนดสีอัตโนมัติ แต่เราสามารถปรับได้ถ้าต้องการความละเอียด
+fig.update_traces(
+    selector=dict(name='ข้อมูลจริง'),
+    line=dict(color='blue', dash='solid'),
+    marker=dict(symbol='circle')
+)
+fig.update_traces(
+    selector=dict(name='เส้นแนวโน้ม'),
+    line=dict(color='green', dash='dash'),
+    marker=dict(symbol='line-ns-open') # ไม่มี marker สำหรับเส้นแนวโน้ม หรือเลือกที่เหมาะสม
+)
+fig.update_traces(
+    selector=dict(name='พยากรณ์'),
+    line=dict(color='red', dash='dot'),
+    marker=dict(symbol='x')
+)
 
-# **ส่วนสำคัญ: ปรับแต่ง layout และ Font สำหรับ Plotly**
+# ปรับแต่ง layout (ตัวอักษร, title, legend)
+# Plotly มักจะรองรับ Font ภาษาไทยได้ดีโดยไม่ต้องตั้งค่าเพิ่มเติมมากนัก
+# แต่เรายังสามารถระบุ font_family เป็น fallback ได้
 fig.update_layout(
-    # ลองใช้ Noto Sans Thai เป็นตัวแรกและตัวเดียวไปก่อน เพื่อตัดตัวแปร
-    font_family="Noto Sans Thai, sans-serif",
-    # เพิ่มการกำหนด font สำหรับ title, axis titles, legend titles โดยเฉพาะ
+    font_family="Noto Sans Thai, sans-serif", # ลองใช้ Noto Sans Thai เป็นตัวแรกและตัวเดียวไปก่อน
     title_font=dict(family="Noto Sans Thai, sans-serif", size=20),
     xaxis_title_font=dict(family="Noto Sans Thai, sans-serif", size=16),
     yaxis_title_font=dict(family="Noto Sans Thai, sans-serif", size=16),
-    legend_title_font=dict(family="Noto Sans Thai, sans-serif", size=12), # เพิ่มสำหรับ legend title
-    legend_font=dict(family="Noto Sans Thai, sans-serif", size=10) # เพิ่มสำหรับ legend item text
+    legend_title_font=dict(family="Noto Sans Thai, sans-serif", size=12),
+    legend_font=dict(family="Noto Sans Thai, sans-serif", size=10),
+    hovermode="x unified" # ทำให้เห็นข้อมูลทุกเส้นพร้อมกันเมื่อ hover
 )
 
 
@@ -128,5 +148,7 @@ if uploaded_file is not None:
     uploaded_df = pd.read_csv(uploaded_file)
     if 'week_num' in uploaded_df.columns and 'cases' in uploaded_df.columns:
         st.sidebar.write("อัปโหลดข้อมูลสำเร็จ! โปรดรีเฟรชหน้าเว็บเพื่อใช้ข้อมูลใหม่")
+        # ในแอปพลิเคชันจริง คุณอาจจะต้องเขียนโค้ดเพื่อบันทึกไฟล์นี้ทับไฟล์เดิม
+        # หรือประมวลผลข้อมูลที่อัปโหลดทันที
     else:
         st.sidebar.error("ไฟล์ CSV ต้องมีคอลัมน์ 'week_num' และ 'cases'")
