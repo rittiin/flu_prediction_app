@@ -10,7 +10,7 @@ import matplotlib.font_manager as fm
 # (เปลี่ยน 'TH Sarabun New' เป็นชื่อ Font ที่มีในเครื่องของคุณ ถ้าใช้ Windows)
 # (สำหรับ Mac อาจจะเป็น 'Thonburi' หรือ 'Ayuthaya')
 # (สำหรับ Linux อาจจะเป็น 'Noto Sans Thai' หรือ 'Liberation Sans')
-thai_font_name = 'tahoma' # ลองเปลี่ยนชื่อ Font ถ้ายังไม่แสดงผล
+thai_font_name = 'Noto Sans Thai' # หรือ 'Liberation Sans'
 
 plt.rcParams['font.family'] = thai_font_name # กำหนด Font หลัก
 plt.rcParams['axes.unicode_minus'] = False # แก้ไขเครื่องหมายลบภาษาไทย
