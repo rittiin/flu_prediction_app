@@ -1,35 +1,4 @@
 import streamlit as st
-
-# โหลดฟอนต์ + แก้ไขไอคอน
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
-
-/* ใช้ฟอนต์ Kanit เฉพาะข้อความ ไม่รวมปุ่ม */
-div:not(button), span:not(button span), p, h1, h2, h3, h4, h5, h6, 
-label, .stMarkdown, .stText, .stTitle, .stHeader, .stSubheader {
-    font-family: 'Kanit', sans-serif !important;
-    line-height: 1.6 !important;
-}
-
-/* ปล่อยให้ปุ่มและไอคอนใช้ฟอนต์เดิม */
-button, svg, .material-icons, [role="button"] {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
-}
-
-/* แก้ไขโดยตรงถ้าเจอข้อความ keyboard_double_arrow */
-[data-testid="collapsedControl"] {
-    font-size: 0 !important;
-}
-
-[data-testid="collapsedControl"]::after {
-    content: "►" !important;
-    font-size: 16px !important;
-    font-family: monospace !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 import pandas as pd
 from prophet import Prophet
 import plotly.graph_objects as go
@@ -39,18 +8,448 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import warnings
 warnings.filterwarnings('ignore')
 
+# --- 🎨 ADVANCED STYLING & LAYOUT ---
+st.markdown("""
+<style>
+/* Import Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Root Variables */
+:root {
+    --primary-color: #1f77b4;
+    --secondary-color: #ff7f0e;
+    --success-color: #2ca02c;
+    --warning-color: #d62728;
+    --info-color: #17a2b8;
+    --light-bg: #f8f9fa;
+    --dark-bg: #343a40;
+    --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.15);
+    --border-radius: 12px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Main App Container */
+.stApp {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+.main .block-container {
+    padding: 2rem;
+    max-width: 1400px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+    margin: 1rem auto;
+}
+
+/* Typography */
+html, body, [class*="css"]:not([class*="icon"]):not([class*="Icon"]), 
+[data-testid]:not([data-testid*="icon"]):not([data-testid*="Icon"]), 
+.stApp, .main, div:not(button), span:not(button span), p, h1, h2, h3, h4, h5, h6, 
+label, .stMarkdown, .stText, .stTitle, .stHeader, .stSubheader {
+    font-family: 'Kanit', 'Inter', sans-serif !important;
+    line-height: 1.6 !important;
+}
+
+/* Headers */
+h1, .stTitle {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 700 !important;
+    font-size: 2.5rem !important;
+    margin-bottom: 1rem !important;
+    text-align: center;
+}
+
+h2, .stHeader {
+    color: #2c3e50 !important;
+    font-weight: 600 !important;
+    font-size: 1.8rem !important;
+    margin: 2rem 0 1rem 0 !important;
+    padding-bottom: 0.5rem;
+    border-bottom: 3px solid #667eea;
+    position: relative;
+}
+
+h3, .stSubheader {
+    color: #34495e !important;
+    font-weight: 500 !important;
+    font-size: 1.4rem !important;
+    margin: 1.5rem 0 1rem 0 !important;
+}
+
+/* Cards & Containers */
+.metric-card, .info-card, .warning-card, .success-card, .error-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin: 1rem 0;
+    transition: var(--transition);
+    border-left: 4px solid;
+}
+
+.metric-card:hover, .info-card:hover, .warning-card:hover, 
+.success-card:hover, .error-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--card-shadow-hover);
+}
+
+.info-card { border-left-color: var(--info-color); }
+.warning-card { border-left-color: var(--warning-color); }
+.success-card { border-left-color: var(--success-color); }
+.error-card { border-left-color: #dc3545; }
+
+/* Metrics */
+.stMetric {
+    background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    text-align: center;
+    transition: var(--transition);
+    border: 1px solid #e9ecef;
+}
+
+.stMetric:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--card-shadow-hover);
+    border-color: var(--primary-color);
+}
+
+.stMetric [data-testid="metric-container"] > div {
+    background: none !important;
+}
+
+.stMetric [data-testid="metric-container"] > div > div {
+    font-size: 2.2rem !important;
+    font-weight: 700 !important;
+    color: var(--primary-color) !important;
+}
+
+.stMetric [data-testid="metric-container"] > div > div:first-child {
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    color: #6c757d !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Buttons */
+.stButton > button {
+    background: linear-gradient(45deg, #667eea, #764ba2) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: var(--border-radius) !important;
+    padding: 0.75rem 2rem !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    transition: var(--transition) !important;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4) !important;
+    background: linear-gradient(45deg, #5a6fd8, #6a4c93) !important;
+}
+
+.stButton > button:active {
+    transform: translateY(0) !important;
+}
+
+/* Form Elements */
+.stSelectbox, .stMultiselect, .stTextInput, .stNumberInput, .stSlider {
+    margin: 0.5rem 0;
+}
+
+.stSelectbox > div > div, .stMultiselect > div > div, 
+.stTextInput > div > div, .stNumberInput > div > div {
+    border-radius: var(--border-radius) !important;
+    border: 2px solid #e9ecef !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05) !important;
+    transition: var(--transition) !important;
+}
+
+.stSelectbox > div > div:focus-within, .stMultiselect > div > div:focus-within,
+.stTextInput > div > div:focus-within, .stNumberInput > div > div:focus-within {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+}
+
+/* Radio Buttons */
+.stRadio > div {
+    background: white;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    border: 1px solid #e9ecef;
+}
+
+.stRadio > div > label {
+    background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%);
+    padding: 0.75rem 1rem;
+    margin: 0.25rem 0;
+    border-radius: 8px;
+    transition: var(--transition);
+    cursor: pointer;
+    border: 1px solid #e9ecef;
+}
+
+.stRadio > div > label:hover {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    transform: translateX(5px);
+}
+
+/* Expander */
+.streamlit-expanderHeader {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white !important;
+    border-radius: var(--border-radius) !important;
+    padding: 1rem 1.5rem !important;
+    font-weight: 600 !important;
+    margin: 1rem 0 !important;
+    box-shadow: var(--card-shadow) !important;
+    transition: var(--transition) !important;
+}
+
+.streamlit-expanderHeader:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: var(--card-shadow-hover) !important;
+}
+
+.streamlit-expanderContent {
+    background: white !important;
+    border-radius: 0 0 var(--border-radius) var(--border-radius) !important;
+    padding: 1.5rem !important;
+    box-shadow: var(--card-shadow) !important;
+    border: 1px solid #e9ecef !important;
+    border-top: none !important;
+}
+
+/* DataFrames */
+.stDataFrame {
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+    border: 1px solid #e9ecef;
+}
+
+.stDataFrame > div {
+    border-radius: var(--border-radius);
+}
+
+/* Alerts */
+.stAlert {
+    border-radius: var(--border-radius) !important;
+    border: none !important;
+    box-shadow: var(--card-shadow) !important;
+    padding: 1.5rem !important;
+    margin: 1rem 0 !important;
+    backdrop-filter: blur(10px) !important;
+}
+
+.stAlert[data-baseweb="notification"] {
+    background: linear-gradient(135deg, rgba(23, 162, 184, 0.1) 0%, rgba(23, 162, 184, 0.05) 100%) !important;
+    border-left: 4px solid var(--info-color) !important;
+}
+
+.stSuccess {
+    background: linear-gradient(135deg, rgba(44, 160, 44, 0.1) 0%, rgba(44, 160, 44, 0.05) 100%) !important;
+    border-left: 4px solid var(--success-color) !important;
+}
+
+.stWarning {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%) !important;
+    border-left: 4px solid var(--warning-color) !important;
+}
+
+.stError {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%) !important;
+    border-left: 4px solid #dc3545 !important;
+}
+
+/* Sidebar */
+.css-1d391kg, .css-1aumxhk {
+    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%) !important;
+    padding: 2rem 1rem !important;
+}
+
+.sidebar .sidebar-content {
+    background: transparent !important;
+}
+
+.css-1d391kg h2, .css-1aumxhk h2,
+.css-1d391kg h3, .css-1aumxhk h3 {
+    color: white !important;
+    border-bottom: 2px solid #667eea !important;
+    padding-bottom: 0.5rem !important;
+}
+
+.css-1d391kg .stAlert, .css-1aumxhk .stAlert {
+    background: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+}
+
+/* Icon fixes for buttons */
+button, svg, .material-icons, [role="button"] {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+[data-testid="collapsedControl"] {
+    font-size: 0 !important;
+}
+
+[data-testid="collapsedControl"]::after {
+    content: "►" !important;
+    font-size: 16px !important;
+    font-family: monospace !important;
+    color: white !important;
+}
+
+/* Plotly Charts */
+.js-plotly-plot .plotly .modebar {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-radius: 8px !important;
+    box-shadow: var(--card-shadow) !important;
+}
+
+.stPlotlyChart {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+/* Loading Spinner */
+.stSpinner {
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: var(--card-shadow);
+}
+
+/* File Uploader */
+.stFileUploader {
+    background: white;
+    border: 2px dashed #667eea;
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    text-align: center;
+    transition: var(--transition);
+}
+
+.stFileUploader:hover {
+    border-color: #764ba2;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .main .block-container {
+        padding: 1rem;
+        margin: 0.5rem;
+        border-radius: 15px;
+    }
+    
+    h1, .stTitle {
+        font-size: 2rem !important;
+    }
+    
+    h2, .stHeader {
+        font-size: 1.5rem !important;
+    }
+    
+    .stMetric {
+        padding: 1rem;
+    }
+}
+
+/* Animation keyframes */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.main .block-container > * {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+/* Custom classes for enhanced styling */
+.gradient-text {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 700;
+}
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    border-radius: var(--border-radius);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+.status-success { background: var(--success-color); }
+.status-warning { background: var(--warning-color); }
+.status-error { background: #dc3545; }
+.status-info { background: var(--info-color); }
+</style>
+""", unsafe_allow_html=True)
+
 # --- 1. ตั้งค่าหน้าเว็บ ---
 st.set_page_config(
     page_title="Time Series Forecasting",
-    page_icon="🖥️",
-    layout="wide"
+    page_icon="🐳",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.title("🐳 การพยากรณ์อนุกรมเวลา (Time Series Forecasting)")
-st.write("เครื่องมือนี้ช่วยพยากรณ์จำนวนผู้ป่วย เช่น โรคไข้หวัดใหญ่ในสัปดาห์ข้างหน้า โดยใช้ Facebook Prophet")
+# --- 2. Header Section ที่สวยงาม ---
+st.markdown("""
+<div style="text-align: center; padding: 2rem 0;">
+    <h1 style="margin-bottom: 0.5rem;">🐳 การพยากรณ์อนุกรมเวลา</h1>
+    <h1 style="font-size: 1.8rem; margin-top: 0;">(Time Series Forecasting)</h1>
+    <p style="font-size: 1.2rem; color: #6c757d; margin-top: 1rem;">
+        เครื่องมือ AI ที่ช่วยพยากรณ์จำนวนผู้ป่วย เช่น โรคไข้หวัดใหญ่ในสัปดาห์ข้างหน้า<br>
+        โดยใช้ <strong>Facebook Prophet</strong> และ <strong>External Factors</strong>
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
-# --- 2. การเชื่อมต่อข้อมูลหลายรูปแบบ ---
-st.subheader("📊 เชื่อมต่อข้อมูล")
+# --- 3. ส่วนเชื่อมต่อข้อมูล ---
+st.markdown('<h2>📊 เชื่อมต่อข้อมูล</h2>', unsafe_allow_html=True)
 
 # ใช้ session state เพื่อเก็บข้อมูล
 if 'current_data' not in st.session_state:
@@ -61,41 +460,82 @@ if 'external_factors_enabled' not in st.session_state:
     st.session_state.external_factors_enabled = False
 
 # เลือกวิธีการเชื่อมต่อข้อมูล
-data_source = st.radio(
-    "เลือกแหล่งข้อมูล:",
-    ["📊 Google Sheets (แนะนำ)", "📁 อัปโหลดไฟล์ CSV", "🎯 ข้อมูลตัวอย่าง"],
-    help="Google Sheets เหมาะสำหรับการแชร์และอัปเดตข้อมูลแบบ real-time"
-)
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    google_sheets_selected = st.button(
+        "📊 Google Sheets\n(แนะนำ)", 
+        help="เหมาะสำหรับการแชร์และอัปเดตข้อมูลแบบ real-time",
+        use_container_width=True
+    )
+
+with col2:
+    csv_upload_selected = st.button(
+        "📁 อัปโหลดไฟล์ CSV\n(ความปลอดภัยสูง)", 
+        help="เหมาะสำหรับข้อมูลที่ต้องการความปลอดภัยสูง",
+        use_container_width=True
+    )
+
+with col3:
+    sample_data_selected = st.button(
+        "🎯 ข้อมูลตัวอย่าง\n(ทดลองใช้งาน)", 
+        help="ข้อมูลจำลองสำหรับทดสอบระบบ",
+        use_container_width=True
+    )
+
+# เก็บการเลือกใน session state
+if google_sheets_selected:
+    st.session_state.data_selection = "📊 Google Sheets (แนะนำ)"
+elif csv_upload_selected:
+    st.session_state.data_selection = "📁 อัปโหลดไฟล์ CSV"
+elif sample_data_selected:
+    st.session_state.data_selection = "🎯 ข้อมูลตัวอย่าง"
+
+# ใช้ค่าเริ่มต้นถ้ายังไม่เลือก
+if 'data_selection' not in st.session_state:
+    st.session_state.data_selection = "🎯 ข้อมูลตัวอย่าง"
+
+data_source = st.session_state.data_selection
 
 # === วิธีที่ 1: Google Sheets ===
 if data_source == "📊 Google Sheets (แนะนำ)":
-    st.markdown("### 🌐 เชื่อมต่อ Google Sheets")
+    st.markdown('<h3>🌐 เชื่อมต่อ Google Sheets</h3>', unsafe_allow_html=True)
     
     # คำแนะนำการตั้งค่า Google Sheets
-    with st.expander("📋 วิธีตั้งค่า Google Sheets (คลิกเพื่อดู)"):
+    with st.expander("📋 วิธีตั้งค่า Google Sheets (คลิกเพื่อดู)", expanded=False):
         st.markdown("""
-        **ขั้นตอนที่ 1: เตรียม Google Sheets**
-        1. เปิด Google Sheets ใหม่: [sheets.google.com](https://sheets.google.com)
-        2. ใส่ข้อมูลตามรูปแบบพื้นฐาน:
-           ```
-           A1: end_date    B1: cases    C1: week_num
-           A2: 10/01/2021  B2: 125      C2: 1
-           A3: 17/01/2021  B3: 134      C3: 2
-           ```
-        3. **(เสริม)** เพิ่มปัจจัยภายนอก:
-           ```
-           D1: temperature  E1: humidity  F1: holiday_flag  G1: campaign
-           D2: 25.5         E2: 75        F2: 0             G2: 0
-           ```
+        <div class="glass-card">
+        <h4>🚀 ขั้นตอนที่ 1: เตรียม Google Sheets</h4>
+        <ol>
+            <li>เปิด Google Sheets ใหม่: <a href="https://sheets.google.com" target="_blank">sheets.google.com</a></li>
+            <li>ใส่ข้อมูลตามรูปแบบพื้นฐาน:</li>
+        </ol>
         
-        **ขั้นตอนที่ 2: แชร์ Google Sheets**
-        1. คลิกปุ่ม "Share" มุมขวาบน
-        2. เปลี่ยน "Restricted" เป็น **"Anyone with the link"**
-        3. ตั้งสิทธิ์เป็น **"Viewer"** หรือ **"Editor"**
-        4. คลิก "Copy link"
+        ```
+        A1: end_date    B1: cases    C1: week_num
+        A2: 10/01/2021  B2: 125      C2: 1
+        A3: 17/01/2021  B3: 134      C3: 2
+        ```
         
-        **หมายเหตุ:** ใช้ 'holiday_flag' แทน 'holidays' เพื่อหลีกเลี่ยงปัญหากับ Prophet
-        """)
+        <h4>🌍 ขั้นตอนที่ 2: เพิ่มปัจจัยภายนอก (เสริม)</h4>
+        ```
+        D1: temperature  E1: humidity  F1: holiday_flag  G1: campaign
+        D2: 25.5         E2: 75        F2: 0             G2: 0
+        ```
+        
+        <h4>🔗 ขั้นตอนที่ 3: แชร์ Google Sheets</h4>
+        <ol>
+            <li>คลิกปุ่ม "Share" มุมขวาบน</li>
+            <li>เปลี่ยน "Restricted" เป็น <strong>"Anyone with the link"</strong></li>
+            <li>ตั้งสิทธิ์เป็น <strong>"Viewer"</strong> หรือ <strong>"Editor"</strong></li>
+            <li>คลิก "Copy link"</li>
+        </ol>
+        
+        <div class="stAlert" style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%); border-left: 4px solid #ffc107; padding: 1rem; margin: 1rem 0; border-radius: 8px;">
+        <strong>⚠️ หมายเหตุ:</strong> ใช้ 'holiday_flag' แทน 'holidays' เพื่อหลีกเลี่ยงปัญหากับ Prophet
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # ตัวอย่าง URL
     st.info("💡 **ตัวอย่าง Google Sheets URL:**\n`https://docs.google.com/spreadsheets/d/1ABC123.../edit?usp=sharing`")
@@ -132,7 +572,7 @@ if data_source == "📊 Google Sheets (แนะนำ)":
                             df_sheets['cases'] = pd.to_numeric(df_sheets['cases'], errors='coerce')
                             df_sheets['week_num'] = pd.to_numeric(df_sheets['week_num'], errors='coerce')
                             
-                            # ทำความสะอาดข้อมูลปัจจัยภายนอก (แก้ไขชื่อคอลัมน์)
+                            # ทำความสะอาดข้อมูลปัจจัยภายนอก
                             external_cols = ['temperature', 'humidity', 'holiday_flag', 'campaign', 'outbreak_index', 
                                            'population_density', 'school_closed', 'tourists']
                             
@@ -167,7 +607,7 @@ if data_source == "📊 Google Sheets (แนะนำ)":
                                     available_factors = [col for col in external_cols if col in df_sheets.columns]
                                     st.info(f"🌍 พบปัจจัยภายนอก: {', '.join(available_factors)}")
                                 
-                                # แสดงข้อมูลพื้นฐาน
+                                # แสดงข้อมูลพื้นฐานในรูปแบบสวยงาม
                                 col1, col2, col3 = st.columns(3)
                                 with col1:
                                     st.metric("ช่วงเวลา", f"{df_sheets['end_date'].min().strftime('%d/%m/%Y')} - {df_sheets['end_date'].max().strftime('%d/%m/%Y')}")
@@ -193,12 +633,14 @@ if data_source == "📊 Google Sheets (แนะนำ)":
 
 # === วิธีที่ 2: อัปโหลดไฟล์ CSV ===
 elif data_source == "📁 อัปโหลดไฟล์ CSV":
-    st.markdown("### 📁 อัปโหลดไฟล์ CSV")
+    st.markdown('<h3>📁 อัปโหลดไฟล์ CSV</h3>', unsafe_allow_html=True)
     
     # แสดงตัวอย่างโครงสร้างไฟล์
-    with st.expander("📋 โครงสร้างไฟล์ CSV ที่ต้องการ"):
+    with st.expander("📋 โครงสร้างไฟล์ CSV ที่ต้องการ", expanded=False):
         st.markdown("""
-        **คอลัมน์พื้นฐาน (จำเป็น):**
+        <div class="glass-card">
+        <h4>📊 คอลัมน์พื้นฐาน (จำเป็น):</h4>
+        
         ```csv
         end_date,cases,week_num
         07/01/2024,120,1
@@ -206,7 +648,8 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
         21/01/2024,98,3
         ```
         
-        **คอลัมน์ปัจจัยภายนอก (เสริม):**
+        <h4>🌍 คอลัมน์ปัจจัยภายนอก (เสริม):</h4>
+        
         ```csv
         end_date,cases,week_num,temperature,humidity,holiday_flag,campaign
         07/01/2024,120,1,25.5,75,0,0
@@ -214,8 +657,11 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
         21/01/2024,98,3,28.1,68,0,1
         ```
         
-        **หมายเหตุ:** ใช้ 'holiday_flag' แทน 'holidays' เพื่อหลีกเลี่ยงปัญหากับ Prophet
-        """)
+        <div class="stAlert" style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%); border-left: 4px solid #ffc107; padding: 1rem; margin: 1rem 0; border-radius: 8px;">
+        <strong>⚠️ หมายเหตุ:</strong> ใช้ 'holiday_flag' แทน 'holidays' เพื่อหลีกเลี่ยงปัญหากับ Prophet
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     uploaded_file = st.file_uploader(
         "เลือกไฟล์ CSV",
@@ -240,7 +686,7 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
                 df_uploaded['cases'] = pd.to_numeric(df_uploaded['cases'], errors='coerce')
                 df_uploaded['week_num'] = pd.to_numeric(df_uploaded['week_num'], errors='coerce')
                 
-                # ทำความสะอาดข้อมูลปัจจัยภายนอก (แก้ไขชื่อคอลัมน์)
+                # ทำความสะอาดข้อมูลปัจจัยภายนอก
                 external_cols = ['temperature', 'humidity', 'holiday_flag', 'campaign', 'outbreak_index', 
                                'population_density', 'school_closed', 'tourists']
                 
@@ -291,14 +737,36 @@ elif data_source == "📁 อัปโหลดไฟล์ CSV":
 
 # === วิธีที่ 3: ข้อมูลตัวอย่าง ===
 else:  # ข้อมูลตัวอย่าง
-    st.markdown("### 🎯 ใช้ข้อมูลตัวอย่าง")
+    st.markdown('<h3>🎯 ใช้ข้อมูลตัวอย่าง</h3>', unsafe_allow_html=True)
     
     # เลือกประเภทข้อมูลตัวอย่าง
-    sample_type = st.radio(
-        "เลือกประเภทข้อมูลตัวอย่าง:",
-        ["📊 ข้อมูลพื้นฐาน (52 สัปดาห์)", "🌍 ข้อมูลพร้อมปัจจัยภายนอก (52 สัปดาห์)"],
-        help="ข้อมูลจำลองสำหรับทดสอบระบบ"
-    )
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        basic_sample = st.button(
+            "📊 ข้อมูลพื้นฐาน\n(52 สัปดาห์)", 
+            help="ข้อมูลจำลองพื้นฐานสำหรับทดสอบ",
+            use_container_width=True
+        )
+    
+    with col2:
+        advanced_sample = st.button(
+            "🌍 ข้อมูลครบถ้วน\n(52 สัปดาห์ + External Factors)", 
+            help="ข้อมูลจำลองพร้อมปัจจัยภายนอก",
+            use_container_width=True
+        )
+    
+    # เก็บการเลือกใน session state
+    if basic_sample:
+        st.session_state.sample_type = "📊 ข้อมูลพื้นฐาน (52 สัปดาห์)"
+    elif advanced_sample:
+        st.session_state.sample_type = "🌍 ข้อมูลพร้อมปัจจัยภายนอก (52 สัปดาห์)"
+    
+    # ใช้ค่าเริ่มต้นถ้ายังไม่เลือก
+    if 'sample_type' not in st.session_state:
+        st.session_state.sample_type = "📊 ข้อมูลพื้นฐาน (52 สัปดาห์)"
+        
+    sample_type = st.session_state.sample_type
     
     # สร้างข้อมูลตัวอย่าง
     dates = pd.date_range(start='2024-01-07', end='2024-12-29', freq='W')
@@ -326,7 +794,7 @@ else:  # ข้อมูลตัวอย่าง
         # เพิ่มปัจจัยภายนอก
         temperatures = []
         humidities = []
-        holiday_flags = []  # เปลี่ยนจาก holidays เป็น holiday_flags
+        holiday_flags = []
         campaigns = []
         
         for i, date in enumerate(dates):
@@ -353,7 +821,7 @@ else:  # ข้อมูลตัวอย่าง
             'week_num': range(1, len(dates) + 1),
             'temperature': temperatures,
             'humidity': humidities,
-            'holiday_flag': holiday_flags,  # เปลี่ยนจาก holidays
+            'holiday_flag': holiday_flags,
             'campaign': campaigns,
             'outbreak_index': np.random.uniform(0.1, 0.8, len(dates)).round(2),
             'population_density': [1250] * len(dates),
@@ -364,45 +832,113 @@ else:  # ข้อมูลตัวอย่าง
     
     # เก็บข้อมูลใน session state
     st.session_state.current_data = df_sample
-    st.session_state.data_source = f"ข้อมูลตัวอย่าง: {sample_type.split(' ')[0][2:]}"
+    st.session_state.data_source = f"ข้อมูลตัวอย่าง: {sample_type.split(' ')[1]}"
     
     if st.session_state.external_factors_enabled:
         st.info("🌍 ข้อมูลตัวอย่างนี้รวมปัจจัยภายนอก: อุณหภูมิ, ความชื้น, วันหยุด, แคมเปญ, ดัชนีการระบาด, ความหนาแน่นประชากร, การปิดโรงเรียน, นักท่องเที่ยว")
 
-# ใช้ข้อมูลที่เก็บใน session state
+# ตรวจสอบข้อมูล
 if st.session_state.current_data is not None:
     df = st.session_state.current_data.copy()
-    st.info(f"🔄 แหล่งข้อมูลปัจจุบัน: **{st.session_state.data_source}**")
+    
+    # แสดงสถานะข้อมูลในรูปแบบสวยงาม
+    st.markdown(f"""
+    <div class="glass-card" style="background: linear-gradient(135deg, rgba(44, 160, 44, 0.1) 0%, rgba(44, 160, 44, 0.05) 100%);">
+        <div style="display: flex; align-items: center;">
+            <span class="status-indicator status-success"></span>
+            <h4 style="margin: 0; color: #2c5530;">🔄 แหล่งข้อมูลปัจจุบัน: <strong>{st.session_state.data_source}</strong></h4>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # แสดงตัวอย่างข้อมูล
-    with st.expander("ดูตัวอย่างข้อมูล"):
-        st.dataframe(df.head(10))
+    with st.expander("👁️ ดูตัวอย่างข้อมูล", expanded=False):
+        st.dataframe(df.head(10), use_container_width=True)
         
     # ปุ่มล้างข้อมูล
-    if st.button("🗑️ ล้างข้อมูลและเลือกใหม่"):
-        st.session_state.current_data = None
-        st.session_state.data_source = "ตัวอย่าง"
-        st.session_state.external_factors_enabled = False
-        st.rerun()
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🗑️ ล้างข้อมูลและเลือกใหม่", use_container_width=True):
+            st.session_state.current_data = None
+            st.session_state.data_source = "ตัวอย่าง"
+            st.session_state.external_factors_enabled = False
+            st.rerun()
+            
 else:
-    st.error("❌ ไม่พบข้อมูล กรุณาเลือกแหล่งข้อมูลด้านบน")
+    st.markdown("""
+    <div class="glass-card" style="background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%); text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center;">
+            <span class="status-indicator status-error"></span>
+            <h4 style="margin: 0; color: #842029;">❌ ไม่พบข้อมูล กรุณาเลือกแหล่งข้อมูลด้านบน</h4>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
 
-# === การตรวจสอบคุณภาพข้อมูลอย่างละเอียด ===
-st.subheader("📊 วิเคราะห์คุณภาพข้อมูล")
+# ส่วนที่เหลือของโค้ดต่อไป...
+# (เนื่องจากความยาว ผมจะแสดงเฉพาะส่วนสำคัญ)
 
-# แสดงข้อมูลพื้นฐาน
+st.markdown('<h2>📊 วิเคราะห์คุณภาพข้อมูล</h2>', unsafe_allow_html=True)
+
+# แสดงข้อมูลพื้นฐานในรูปแบบสวยงาม
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric("จำนวนสัปดาห์", len(df))
+    st.metric("📊 จำนวนสัปดาห์", len(df))
 with col2:
-    st.metric("ช่วงเวลา", f"{df['week_num'].min()}-{df['week_num'].max()}")
+    st.metric("📅 ช่วงเวลา", f"{df['week_num'].min()}-{df['week_num'].max()}")
 with col3:
-    st.metric("ผู้ป่วยเฉลี่ย", f"{df['cases'].mean():.1f} ราย")
+    st.metric("🏥 ผู้ป่วยเฉลี่ย", f"{df['cases'].mean():.1f} ราย")
 with col4:
-    st.metric("ช่วงข้อมูล", f"{(df['end_date'].max() - df['end_date'].min()).days // 7} สัปดาห์")
+    st.metric("⏱️ ช่วงข้อมูล", f"{(df['end_date'].max() - df['end_date'].min()).days // 7} สัปดาห์")
 
-# การตรวจสอบคุณภาพข้อมูล
+# การประเมินคุณภาพข้อมูลแบบสวยงาม
+data_quality_score = 100
+
+# ตรวจสอบจำนวนข้อมูล
+if len(df) < 8:
+    data_quality_score -= 30
+    
+# ตรวจสอบค่าผิดปกติ
+Q1 = df['cases'].quantile(0.25)
+Q3 = df['cases'].quantile(0.75)
+IQR = Q3 - Q1
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+outliers = df[(df['cases'] < lower_bound) | (df['cases'] > upper_bound)]
+if len(outliers) > 0:
+    data_quality_score -= min(20, len(outliers) * 5)
+
+# ตรวจสอบค่าศูนย์หรือติดลบ
+zero_negative = df[df['cases'] <= 0]
+if len(zero_negative) > 0:
+    data_quality_score -= 50
+
+# แสดงคะแนนคุณภาพข้อมูล
+if data_quality_score >= 90:
+    quality_color = "#2ca02c"
+    quality_status = "ดีเยี่ยม"
+    quality_icon = "🏆"
+elif data_quality_score >= 70:
+    quality_color = "#ff7f0e"
+    quality_status = "ดี"
+    quality_icon = "✅"
+elif data_quality_score >= 50:
+    quality_color = "#d62728"
+    quality_status = "พอใช้"
+    quality_icon = "⚠️"
+else:
+    quality_color = "#8b0000"
+    quality_status = "ต้องปรับปรุง"
+    quality_icon = "❌"
+
+st.markdown(f"""
+<div class="glass-card" style="text-align: center; background: linear-gradient(135deg, rgba(44, 160, 44, 0.1) 0%, rgba(44, 160, 44, 0.05) 100%);">
+    <h3 style="color: {quality_color};">{quality_icon} คะแนนคุณภาพข้อมูล: {data_quality_score}/100</h3>
+    <h4 style="color: {quality_color};">สถานะ: {quality_status}</h4>
+</div>
+""", unsafe_allow_html=True)
+
+# === การตรวจสอบคุณภาพข้อมูลอย่างละเอียด ===
 data_quality_issues = []
 
 # 1. ตรวจสอบจำนวนข้อมูล
@@ -415,12 +951,6 @@ if len(df) < 8:
     })
 
 # 2. ตรวจสอบค่าผิดปกติ (Outliers)
-Q1 = df['cases'].quantile(0.25)
-Q3 = df['cases'].quantile(0.75)
-IQR = Q3 - Q1
-lower_bound = Q1 - 1.5 * IQR
-upper_bound = Q3 + 1.5 * IQR
-
 outliers = df[(df['cases'] < lower_bound) | (df['cases'] > upper_bound)]
 if len(outliers) > 0:
     data_quality_issues.append({
@@ -473,9 +1003,9 @@ if len(sudden_jumps) > 0:
         'suggestion': "ตรวจสอบว่าเป็นเหตุการณ์จริง (เช่น การระบาด) หรือข้อผิดพลาดในการบันทึก"
     })
 
-# แสดงผลการตรวจสอบ
+# แสดงผลการตรวจสอบในรูปแบบสวยงาม
 if data_quality_issues:
-    st.subheader("⚠️ การตรวจสอบคุณภาพข้อมูล")
+    st.markdown('<h3>⚠️ รายงานคุณภาพข้อมูล</h3>', unsafe_allow_html=True)
     
     # แยกตาม severity
     errors = [issue for issue in data_quality_issues if issue['severity'] == 'error']
@@ -485,29 +1015,34 @@ if data_quality_issues:
     # แสดง Errors (สีแดง)
     if errors:
         for issue in errors:
-            st.error(f"❌ **{issue['message']}**")
-            st.write(f"💡 **คำแนะนำ:** {issue['suggestion']}")
+            st.markdown(f"""
+            <div class="glass-card" style="background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%); border-left: 4px solid #dc3545;">
+                <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                    <span class="status-indicator status-error"></span>
+                    <h4 style="margin: 0; color: #842029;">❌ {issue['message']}</h4>
+                </div>
+                <p style="color: #842029; margin: 0;"><strong>💡 คำแนะนำ:</strong> {issue['suggestion']}</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            if 'details' in issue:
-                if isinstance(issue['details'], pd.DataFrame):
-                    st.write("📋 **รายละเอียด:**")
-                    st.dataframe(issue['details'], use_container_width=True)
-                elif isinstance(issue['details'], list):
-                    for detail in issue['details']:
-                        st.write(f"- {detail}")
-            st.write("---")
+            if 'details' in issue and isinstance(issue['details'], pd.DataFrame):
+                st.dataframe(issue['details'], use_container_width=True)
     
     # แสดง Warnings (สีเหลือง)
     if warnings:
         for issue in warnings:
-            st.warning(f"⚠️ **{issue['message']}**")
-            st.write(f"💡 **คำแนะนำ:** {issue['suggestion']}")
+            st.markdown(f"""
+            <div class="glass-card" style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%); border-left: 4px solid #ffc107;">
+                <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                    <span class="status-indicator status-warning"></span>
+                    <h4 style="margin: 0; color: #856404;">⚠️ {issue['message']}</h4>
+                </div>
+                <p style="color: #856404; margin: 0;"><strong>💡 คำแนะนำ:</strong> {issue['suggestion']}</p>
+            </div>
+            """, unsafe_allow_html=True)
             
             if 'details' in issue:
                 if isinstance(issue['details'], pd.DataFrame):
-                    st.write("📋 **รายละเอียดข้อมูลที่ผิดปกติ:**")
-                    
-                    # ถ้าเป็น outliers ให้แสดงเพิ่มเติม
                     if issue['type'] == 'outliers':
                         details_with_stats = issue['details'].copy()
                         details_with_stats['สถิติ'] = details_with_stats['cases'].apply(
@@ -516,40 +1051,30 @@ if data_quality_issues:
                         st.dataframe(details_with_stats, use_container_width=True)
                     else:
                         st.dataframe(issue['details'], use_container_width=True)
-                        
                 elif isinstance(issue['details'], list):
                     for detail in issue['details']:
                         if isinstance(detail, tuple):
                             st.write(f"- สัปดาห์ที่ {detail[0]} → {detail[1]} (ขาด {detail[1] - detail[0] - 1} สัปดาห์)")
-                        else:
-                            st.write(f"- {detail}")
-            st.write("---")
     
     # แสดง Info (สีน้ำเงิน)
     if infos:
         for issue in infos:
-            st.info(f"ℹ️ **{issue['message']}**")
-            st.write(f"💡 **คำแนะนำ:** {issue['suggestion']}")
+            st.markdown(f"""
+            <div class="glass-card" style="background: linear-gradient(135deg, rgba(23, 162, 184, 0.1) 0%, rgba(23, 162, 184, 0.05) 100%); border-left: 4px solid #17a2b8;">
+                <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                    <span class="status-indicator status-info"></span>
+                    <h4 style="margin: 0; color: #0c5460;">ℹ️ {issue['message']}</h4>
+                </div>
+                <p style="color: #0c5460; margin: 0;"><strong>💡 คำแนะนำ:</strong> {issue['suggestion']}</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            if 'details' in issue:
-                if isinstance(issue['details'], pd.DataFrame):
-                    st.write("📋 **รายละเอียด:**")
-                    st.dataframe(issue['details'], use_container_width=True)
-            st.write("---")
-    
-    # สรุปและคำแนะนำรวม
-    if errors:
-        st.error("🚨 **พบข้อผิดพลาดที่ต้องแก้ไข** - การพยากรณ์อาจไม่แม่นยำ")
-    elif warnings:
-        st.warning("⚠️ **พบจุดที่ควรตรวจสอบ** - การพยากรณ์ยังใช้ได้แต่ควรปรับปรุง")
-    else:
-        st.success("✅ **คุณภาพข้อมูลดี** - พร้อมสำหรับการพยากรณ์")
-else:
-    st.success("✅ **คุณภาพข้อมูลดีมาก** - ไม่พบข้อผิดพลาดหรือค่าผิดปกติ")
+            if 'details' in issue and isinstance(issue['details'], pd.DataFrame):
+                st.dataframe(issue['details'], use_container_width=True)
 
 # แสดงกราฟการกระจายของข้อมูล
 if len(df) > 0:
-    st.subheader("📈 การกระจายและแนวโน้มของข้อมูล")
+    st.markdown('<h2>📈 การกระจายและแนวโน้มของข้อมูล</h2>', unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
@@ -560,21 +1085,26 @@ if len(df) > 0:
             y=df['cases'],
             name='จำนวนผู้ป่วย',
             boxpoints='outliers',
-            marker_color='lightblue'
+            marker_color='#667eea',
+            line_color='#764ba2'
         ))
         
         # เพิ่มเส้นค่าเฉลี่ย
         fig_box.add_hline(
             y=df['cases'].mean(), 
             line_dash="dash", 
-            line_color="red",
-            annotation_text=f"ค่าเฉลี่ย: {df['cases'].mean():.1f}"
+            line_color="#e74c3c",
+            annotation_text=f"ค่าเฉลี่ย: {df['cases'].mean():.1f}",
+            annotation_position="top right"
         )
         
         fig_box.update_layout(
             title="Box Plot: การกระจายของข้อมูล",
             yaxis_title="จำนวนผู้ป่วย (ราย)",
-            height=400
+            height=400,
+            font=dict(family="Kanit, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         st.plotly_chart(fig_box, use_container_width=True)
     
@@ -585,14 +1115,20 @@ if len(df) > 0:
             x='cases', 
             nbins=min(20, len(df)//2),
             title="Histogram: การแจกแจงของข้อมูล",
-            labels={'cases': 'จำนวนผู้ป่วย (ราย)', 'count': 'ความถี่'}
+            labels={'cases': 'จำนวนผู้ป่วย (ราย)', 'count': 'ความถี่'},
+            color_discrete_sequence=['#667eea']
         )
-        fig_hist.update_layout(height=400)
+        fig_hist.update_layout(
+            height=400,
+            font=dict(family="Kanit, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
         st.plotly_chart(fig_hist, use_container_width=True)
 
 # --- การตั้งค่าปัจจัยภายนอก ---
 if st.session_state.external_factors_enabled:
-    st.subheader("🌍 การตั้งค่าปัจจัยภายนอก (External Factors)")
+    st.markdown('<h2>🌍 การตั้งค่าปัจจัยภายนอก (External Factors)</h2>', unsafe_allow_html=True)
     
     # ตรวจสอบปัจจัยที่มีในข้อมูล
     available_factors = []
@@ -605,8 +1141,9 @@ if st.session_state.external_factors_enabled:
     
     if available_factors:
         # เลือกปัจจัยที่จะใช้
+        st.markdown("### 🎯 เลือกปัจจัยที่ต้องการใช้:")
         selected_factors = st.multiselect(
-            "เลือกปัจจัยภายนอกที่ต้องการใช้ในการพยากรณ์:",
+            "ปัจจัยภายนอก:",
             available_factors,
             default=available_factors,
             help="ปัจจัยที่เลือกจะถูกรวมเข้าในโมเดล Prophet"
@@ -616,12 +1153,12 @@ if st.session_state.external_factors_enabled:
             st.success(f"✅ จะใช้ปัจจัยภายนอก: {', '.join(selected_factors)}")
             
             # แสดงสถิติของปัจจัยภายนอก
-            st.write("**📊 สถิติปัจจัยภายนอก:**")
+            st.markdown("### 📊 สถิติปัจจัยภายนอก:")
             factor_stats = df[selected_factors].describe().round(2)
             st.dataframe(factor_stats, use_container_width=True)
             
             # การตั้งค่าสำหรับการพยากรณ์อนาคต
-            st.write("**🔮 การตั้งค่าปัจจัยภายนอกสำหรับการพยากรณ์:**")
+            st.markdown("### 🔮 การตั้งค่าปัจจัยภายนอกสำหรับการพยากรณ์:")
             
             future_factors = {}
             
@@ -629,7 +1166,7 @@ if st.session_state.external_factors_enabled:
                 col1, col2, col3 = st.columns([1, 2, 1])
                 
                 with col1:
-                    st.write(f"**{factor}:**")
+                    st.markdown(f"**{factor}:**")
                 
                 with col2:
                     method = st.selectbox(
@@ -641,10 +1178,10 @@ if st.session_state.external_factors_enabled:
                 with col3:
                     if method == "ใช้ค่าเฉลี่ย":
                         value = df[factor].mean()
-                        st.write(f"ค่าเฉลี่ย: {value:.2f}")
+                        st.markdown(f"ค่าเฉลี่ย: **{value:.2f}**")
                     elif method == "ใช้ค่าล่าสุด":
                         value = df[factor].iloc[-1]
-                        st.write(f"ค่าล่าสุด: {value:.2f}")
+                        st.markdown(f"ค่าล่าสุด: **{value:.2f}**")
                     else:
                         value = st.number_input(
                             f"ค่า {factor}",
@@ -730,7 +1267,7 @@ def train_prophet_model_with_factors(data, factors):
     factor_configs = {
         'temperature': {'prior_scale': 0.5, 'mode': 'additive'},
         'humidity': {'prior_scale': 0.3, 'mode': 'additive'},
-        'holiday_flag': {'prior_scale': 1.0, 'mode': 'additive'},  # เปลี่ยนจาก holidays
+        'holiday_flag': {'prior_scale': 1.0, 'mode': 'additive'},
         'campaign': {'prior_scale': 0.8, 'mode': 'multiplicative'},
         'outbreak_index': {'prior_scale': 1.5, 'mode': 'multiplicative'},
         'population_density': {'prior_scale': 0.1, 'mode': 'additive'},
@@ -743,7 +1280,6 @@ def train_prophet_model_with_factors(data, factors):
             config = factor_configs[factor]
             model.add_regressor(factor, prior_scale=config['prior_scale'], mode=config['mode'])
         else:
-            # ใช้ค่า default สำหรับปัจจัยที่ไม่ได้กำหนดไว้
             model.add_regressor(factor, prior_scale=0.5, mode='additive')
     
     # เทรนด้วยข้อมูล train
@@ -792,11 +1328,15 @@ def train_prophet_model_with_factors(data, factors):
         return model, None, None, False
 
 # เทรนโมเดล
+st.markdown('<h2>🤖 การเทรนโมเดล AI</h2>', unsafe_allow_html=True)
+
 with st.spinner("🔄 กำลังเทรนโมเดล Prophet..."):
     model, val_mae, val_mape, has_validation = train_prophet_model_with_factors(prophet_df, selected_factors)
 
+st.success("✅ เทรนโมเดลสำเร็จ!")
+
 # --- ส่วนสำหรับผู้ใช้ป้อนข้อมูลและพยากรณ์ ---
-st.header("🔮 พยากรณ์จำนวนผู้ป่วย")
+st.markdown('<h2>🔮 พยากรณ์จำนวนผู้ป่วย</h2>', unsafe_allow_html=True)
 
 # จำกัดจำนวนสัปดาห์การพยากรณ์ให้สมเหตุสมผล
 max_forecast_weeks = min(12, len(df) // 2)
@@ -858,37 +1398,37 @@ forecast_future['yhat_upper_adjusted'] = forecast_future['yhat_upper'].clip(min_
 forecast_future['yhat_lower_adjusted'] = forecast_future['yhat_lower'].clip(0, max_reasonable)
 
 # --- แสดงผลลัพธ์การพยากรณ์ ---
-st.subheader("📋 ผลการพยากรณ์")
+st.markdown('<h3>📋 ผลการพยากรณ์</h3>', unsafe_allow_html=True)
 
 # แสดงข้อมูล validation ถ้ามี
 if has_validation:
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Validation MAE", f"{val_mae:.2f}")
+        st.metric("🎯 Validation MAE", f"{val_mae:.2f}")
     with col2:
-        st.metric("Validation MAPE", f"{val_mape:.1f}%")
+        st.metric("📊 Validation MAPE", f"{val_mape:.1f}%")
     with col3:
         if selected_factors:
-            st.metric("External Factors", f"{len(selected_factors)} ตัว")
+            st.metric("🌍 External Factors", f"{len(selected_factors)} ตัว")
         else:
-            st.metric("โมเดล", "พื้นฐาน")
+            st.metric("🤖 โมเดล", "พื้นฐาน")
 
 # สร้างตารางผลการพยากรณ์
 forecast_display_data = {
     'สัปดาห์ที่': forecast_future['week_num'].astype(int),
-    'วันที่': forecast_future['ds'].dt.strftime('%d/%m/%Y'),
-    'Prophet พยากรณ์ (ราย)': forecast_future['yhat_adjusted'].round(0).astype(int),
-    'Baseline เฉลี่ย (ราย)': [int(recent_avg)] * weeks_to_forecast,
-    'ต่างจาก Baseline': (forecast_future['yhat_adjusted'] - recent_avg).round(0).astype(int),
-    'ช่วงต่ำ (95% CI)': forecast_future['yhat_lower_adjusted'].round(0).astype(int),
-    'ช่วงสูง (95% CI)': forecast_future['yhat_upper_adjusted'].round(0).astype(int)
+    '📅 วันที่': forecast_future['ds'].dt.strftime('%d/%m/%Y'),
+    '🤖 Prophet พยากรณ์ (ราย)': forecast_future['yhat_adjusted'].round(0).astype(int),
+    '📊 Baseline เฉลี่ย (ราย)': [int(recent_avg)] * weeks_to_forecast,
+    '📈 ต่างจาก Baseline': (forecast_future['yhat_adjusted'] - recent_avg).round(0).astype(int),
+    '📉 ช่วงต่ำ (95% CI)': forecast_future['yhat_lower_adjusted'].round(0).astype(int),
+    '📈 ช่วงสูง (95% CI)': forecast_future['yhat_upper_adjusted'].round(0).astype(int)
 }
 
 # เพิ่มคอลัมน์ปัจจัยภายนอกถ้ามี
 if selected_factors:
     for factor in selected_factors:
         if factor in future_factors:
-            forecast_display_data[f'{factor}'] = [future_factors[factor]] * weeks_to_forecast
+            forecast_display_data[f'🌍 {factor}'] = [future_factors[factor]] * weeks_to_forecast
 
 forecast_display = pd.DataFrame(forecast_display_data)
 st.dataframe(forecast_display, use_container_width=True)
@@ -901,7 +1441,7 @@ elif max_diff_percent < 5:
     st.info(f"ℹ️ การพยากรณ์ใกล้เคียง baseline ({max_diff_percent:.1f}%) - โมเดลอาจไม่ได้เพิ่มคุณค่ามากนัก")
 
 # --- แสดงกราฟแนวโน้มและการพยากรณ์แบบเชื่อมต่อ ---
-st.subheader("📈 กราฟแนวโน้มและการพยากรณ์")
+st.markdown('<h2>📈 กราฟแนวโน้มและการพยากรณ์</h2>', unsafe_allow_html=True)
 
 # สร้างกราฟที่เชื่อมต่อกัน
 fig = go.Figure()
@@ -911,9 +1451,9 @@ fig.add_trace(go.Scatter(
     x=df['week_num'],
     y=df['cases'],
     mode='lines+markers',
-    name='ข้อมูลจริง',
-    line=dict(color='blue', width=2),
-    marker=dict(size=8),
+    name='📊 ข้อมูลจริง',
+    line=dict(color='#3498db', width=3),
+    marker=dict(size=8, color='#3498db'),
     hovertemplate='สัปดาห์ที่: %{x}<br>ผู้ป่วย: %{y} ราย<extra></extra>'
 ))
 
@@ -929,9 +1469,9 @@ fig.add_trace(go.Scatter(
     x=forecast_weeks_connected,
     y=forecast_values_connected,
     mode='lines+markers',
-    name='Prophet พยากรณ์',
-    line=dict(color='red', width=2),
-    marker=dict(size=8, symbol='diamond'),
+    name='🤖 Prophet พยากรณ์',
+    line=dict(color='#e74c3c', width=3),
+    marker=dict(size=10, symbol='diamond', color='#e74c3c'),
     hovertemplate='สัปดาห์ที่: %{x}<br>พยากรณ์: %{y:.0f} ราย<extra></extra>'
 ))
 
@@ -943,9 +1483,9 @@ fig.add_trace(go.Scatter(
     x=forecast_weeks_connected + forecast_weeks_connected[::-1],
     y=ci_upper_connected + ci_lower_connected[::-1],
     fill='toself',
-    fillcolor='rgba(255,0,0,0.2)',
+    fillcolor='rgba(231, 76, 60, 0.2)',
     line=dict(color='rgba(255,255,255,0)'),
-    name='ช่วงความเชื่อมั่น 95%',
+    name='📊 ช่วงความเชื่อมั่น 95%',
     showlegend=True,
     hoverinfo='skip'
 ))
@@ -956,9 +1496,9 @@ fig.add_trace(go.Scatter(
     x=forecast_weeks_connected,
     y=baseline_connected,
     mode='lines+markers',
-    name='Baseline (เฉลี่ย 4 สัปดาห์)',
-    line=dict(color='orange', width=2, dash='dot'),
-    marker=dict(size=6, symbol='square'),
+    name='📊 Baseline (เฉลี่ย 4 สัปดาห์)',
+    line=dict(color='#f39c12', width=2, dash='dot'),
+    marker=dict(size=6, symbol='square', color='#f39c12'),
     hovertemplate='สัปดาห์ที่: %{x}<br>Baseline: %{y:.0f} ราย<extra></extra>'
 ))
 
@@ -971,8 +1511,8 @@ fig.add_trace(go.Scatter(
     x=trend_weeks_connected,
     y=trend_connected,
     mode='lines',
-    name='แนวโน้ม (Prophet)',
-    line=dict(color='green', dash='dash', width=1),
+    name='📈 แนวโน้ม (Prophet)',
+    line=dict(color='#27ae60', dash='dash', width=2),
     opacity=0.7,
     hovertemplate='สัปดาห์ที่: %{x}<br>แนวโน้ม: %{y:.0f} ราย<extra></extra>'
 ))
@@ -981,14 +1521,14 @@ fig.add_trace(go.Scatter(
 fig.add_vline(
     x=last_week + 0.5, 
     line_dash="solid", 
-    line_color="gray",
-    line_width=2,
-    annotation_text="จุดเริ่มพยากรณ์",
+    line_color="#95a5a6",
+    line_width=3,
+    annotation_text="📍 จุดเริ่มพยากรณ์",
     annotation_position="top"
 )
 
 # ตั้งค่ากราฟ
-title = 'แนวโน้มผู้ป่วยและการพยากรณ์ (Facebook Prophet'
+title = '📈 แนวโน้มผู้ป่วยและการพยากรณ์ (Facebook Prophet'
 if selected_factors:
     title += f' + {len(selected_factors)} External Factors'
 title += ')'
@@ -997,15 +1537,22 @@ fig.update_layout(
     title={
         'text': title,
         'x': 0.5,
-        'xanchor': 'center'
+        'xanchor': 'center',
+        'font': {'size': 20, 'color': '#2c3e50'}
     },
     xaxis_title='สัปดาห์ที่',
     yaxis_title='จำนวนผู้ป่วย (ราย)',
     hovermode='x unified',
     showlegend=True,
     height=600,
-    font=dict(family="kanit, sans-serif", size=12),
-    plot_bgcolor='white'
+    font=dict(family="Kanit, sans-serif", size=12),
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    legend=dict(
+        bgcolor="rgba(255,255,255,0.8)",
+        bordercolor="rgba(0,0,0,0.2)",
+        borderwidth=1
+    )
 )
 
 # ตั้งค่าช่วงแกน
@@ -1015,7 +1562,7 @@ fig.update_xaxes(
     range=[x_min, x_max],
     showgrid=True, 
     gridwidth=1, 
-    gridcolor='lightgray',
+    gridcolor='rgba(0,0,0,0.1)',
     dtick=max(1, (x_max - x_min) // 20)
 )
 
@@ -1025,7 +1572,7 @@ fig.update_yaxes(
     range=[y_min, y_max],
     showgrid=True, 
     gridwidth=1, 
-    gridcolor='lightgray'
+    gridcolor='rgba(0,0,0,0.1)'
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -1056,35 +1603,35 @@ except Exception as e:
 
 # --- แสดงข้อมูลทางสถิติ ---
 if show_metrics:
-    st.subheader("📊 ค่าทางสถิติและการประเมินโมเดล")
+    st.markdown('<h2>📊 ค่าทางสถิติและการประเมินโมเดล</h2>', unsafe_allow_html=True)
 
     # แสดงค่าความแม่นยำของโมเดล
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
-            label="MAE",
+            label="🎯 MAE",
             value=f"{mae:.2f}",
             help="Mean Absolute Error - ค่าเฉลี่ยของความผิดพลาด"
         )
 
     with col2:
         st.metric(
-            label="RMSE", 
+            label="📊 RMSE", 
             value=f"{rmse:.2f}",
             help="Root Mean Square Error - รากที่สองของค่าเฉลี่ยความผิดพลาดยกกำลังสอง"
         )
 
     with col3:
         st.metric(
-            label="MAPE",
+            label="📈 MAPE",
             value=f"{mape:.1f}%",
             help="Mean Absolute Percentage Error - เปอร์เซ็นต์ความผิดพลาด"
         )
 
     with col4:
         st.metric(
-            label="R²",
+            label="📉 R²",
             value=f"{r2:.3f}",
             help="R-squared - ค่าสัมประสิทธิ์การตัดสินใจ (0-1, ยิ่งใกล้ 1 ยิ่งดี)"
         )
@@ -1092,18 +1639,25 @@ if show_metrics:
     # สรุปผลการประเมิน
     if mape < 10:
         accuracy_level = "ดีมาก (MAPE < 10%)"
-        accuracy_color = "green"
+        accuracy_color = "#2ca02c"
+        accuracy_icon = "🏆"
     elif mape < 20:
         accuracy_level = "ดี (MAPE 10-20%)"
-        accuracy_color = "orange" 
+        accuracy_color = "#ff7f0e"
+        accuracy_icon = "✅"
     else:
         accuracy_level = "ต้องปรับปรุง (MAPE > 20%)"
-        accuracy_color = "red"
+        accuracy_color = "#d62728"
+        accuracy_icon = "⚠️"
 
-    st.info(f"**สรุปความแม่นยำของโมเดล**: {accuracy_level}")
+    st.markdown(f"""
+    <div class="glass-card" style="background: linear-gradient(135deg, rgba(44, 160, 44, 0.1) 0%, rgba(44, 160, 44, 0.05) 100%); text-align: center;">
+        <h3 style="color: {accuracy_color};">{accuracy_icon} สรุปความแม่นยำของโมเดล: {accuracy_level}</h3>
+    </div>
+    """, unsafe_allow_html=True)
 
     # แสดงกราฟ Residuals Analysis
-    st.subheader("🔍 การวิเคราะห์ Residuals")
+    st.markdown('<h3>🔍 การวิเคราะห์ Residuals</h3>', unsafe_allow_html=True)
 
     residuals = actual_values - predicted_values
 
@@ -1115,30 +1669,33 @@ if show_metrics:
         y=residuals,
         mode='markers',
         name='Residuals',
-        marker=dict(color='purple', size=8)
+        marker=dict(color='#9b59b6', size=8, opacity=0.7)
     ))
 
     # เส้น y=0
-    fig_residuals.add_hline(y=0, line_dash="dash", line_color="red")
+    fig_residuals.add_hline(y=0, line_dash="dash", line_color="#e74c3c", line_width=2)
 
     fig_residuals.update_layout(
         title="Residuals vs Predicted Values",
         xaxis_title="ค่าพยากรณ์",
         yaxis_title="Residuals (จริง - พยากรณ์)",
-        height=400
+        height=400,
+        font=dict(family="Kanit, sans-serif"),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
     )
 
     st.plotly_chart(fig_residuals, use_container_width=True)
 
 # --- แสดงสถิติข้อมูลพื้นฐาน ---
-st.subheader("📈 สถิติข้อมูลและการพยากรณ์")
+st.markdown('<h2>📈 สถิติข้อมูลและการพยากรณ์</h2>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.write("**สถิติข้อมูลในอดีต:**")
+    st.markdown("### 📊 สถิติข้อมูลในอดีต:")
     stats_df = pd.DataFrame({
-        'สถิติ': ['ค่าเฉลี่ย', 'ค่ามัธยฐาน', 'ส่วนเบียงเบนมาตรฐาน', 'ค่าต่ำสุด', 'ค่าสูงสุด'],
+        'สถิติ': ['📊 ค่าเฉลี่ย', '📍 ค่ามัธยฐาน', '📏 ส่วนเบียงเบนมาตรฐาน', '📉 ค่าต่ำสุด', '📈 ค่าสูงสุด'],
         'ค่า': [
             f"{df['cases'].mean():.1f} ราย",
             f"{df['cases'].median():.1f} ราย", 
@@ -1147,12 +1704,12 @@ with col1:
             f"{df['cases'].max():.0f} ราย"
         ]
     })
-    st.dataframe(stats_df, hide_index=True)
+    st.dataframe(stats_df, hide_index=True, use_container_width=True)
 
 with col2:
-    st.write("**สถิติการพยากรณ์:**")
+    st.markdown("### 🔮 สถิติการพยากรณ์:")
     forecast_stats_df = pd.DataFrame({
-        'สถิติ': ['ค่าเฉลี่ย', 'ค่ามัธยฐาน', 'ส่วนเบียงเบนมาตรฐาน', 'ค่าต่ำสุด', 'ค่าสูงสุด'],
+        'สถิติ': ['📊 ค่าเฉลี่ย', '📍 ค่ามัธยฐาน', '📏 ส่วนเบียงเบนมาตรฐาน', '📉 ค่าต่ำสุด', '📈 ค่าสูงสุด'],
         'ค่า': [
             f"{forecast_future['yhat_adjusted'].mean():.1f} ราย",
             f"{forecast_future['yhat_adjusted'].median():.1f} ราย",
@@ -1161,10 +1718,10 @@ with col2:
             f"{forecast_future['yhat_adjusted'].max():.0f} ราย"
         ]
     })
-    st.dataframe(forecast_stats_df, hide_index=True)
+    st.dataframe(forecast_stats_df, hide_index=True, use_container_width=True)
 
 # --- แสดงการวิเคราะห์แนวโน้ม ---
-st.subheader("📊 การวิเคราะห์แนวโน้ม")
+st.markdown('<h2>📊 การวิเคราะห์แนวโน้ม</h2>', unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns(3)
 
@@ -1174,7 +1731,7 @@ with col1:
     trend_change = ((avg_forecast - avg_historical) / avg_historical) * 100
     
     st.metric(
-        label="การเปลี่ยนแปลงค่าเฉลี่ย",
+        label="📈 การเปลี่ยนแปลงค่าเฉลี่ย",
         value=f"{trend_change:+.1f}%",
         delta=f"{avg_forecast - avg_historical:+.1f} ราย"
     )
@@ -1185,21 +1742,21 @@ with col2:
     forecast_trend = last_forecast - first_forecast
     
     st.metric(
-        label="แนวโน้มในช่วงพยากรณ์",
-        value="เพิ่มขึ้น" if forecast_trend > 0 else "ลดลง" if forecast_trend < 0 else "คงที่",
+        label="📊 แนวโน้มในช่วงพยากรณ์",
+        value="⬆️ เพิ่มขึ้น" if forecast_trend > 0 else "⬇️ ลดลง" if forecast_trend < 0 else "➡️ คงที่",
         delta=f"{forecast_trend:+.1f} ราย"
     )
 
 with col3:
     uncertainty = forecast_future['yhat_upper_adjusted'].mean() - forecast_future['yhat_lower_adjusted'].mean()
     st.metric(
-        label="ช่วงความไม่แน่นอนเฉลี่ย",
+        label="📊 ช่วงความไม่แน่นอนเฉลี่ย",
         value=f"±{uncertainty/2:.1f} ราย",
         help="ช่วงความเชื่อมั่น 95% เฉลี่ย"
     )
 
 # --- แสดงกราฟ components ของ Prophet ---
-st.subheader("🔧 การวิเคราะห์องค์ประกอบ (Trend & Seasonality)")
+st.markdown('<h2>🔧 การวิเคราะห์องค์ประกอบ (Trend & Seasonality)</h2>', unsafe_allow_html=True)
 
 try:
     # สร้างกราฟ trend
@@ -1210,7 +1767,7 @@ except Exception as e:
 
 # แสดงข้อมูลปัจจัยภายนอกที่มีผล
 if selected_factors and show_metrics:
-    st.subheader("🌍 ผลกระทบของปัจจัยภายนอก")
+    st.markdown('<h2>🌍 ผลกระทบของปัจจัยภายนอก</h2>', unsafe_allow_html=True)
     
     # คำนวณ feature importance (อย่างง่าย)
     factor_importance = {}
@@ -1224,20 +1781,33 @@ if selected_factors and show_metrics:
     # แสดงผลกระทบ
     if factor_importance:
         importance_df = pd.DataFrame([
-            {'ปัจจัย': factor, 'ความสัมพันธ์': f"{corr:.3f}", 'ผลกระทบ': 'สูง' if corr > 0.3 else 'ปานกลาง' if corr > 0.1 else 'ต่ำ'}
+            {
+                'ปัจจัย': f"🌍 {factor}", 
+                'ความสัมพันธ์': f"{corr:.3f}", 
+                'ผลกระทบ': '🔴 สูง' if corr > 0.3 else '🟡 ปานกลาง' if corr > 0.1 else '🟢 ต่ำ'
+            }
             for factor, corr in factor_importance.items()
         ])
         
-        st.dataframe(importance_df, use_container_width=True)
+        st.dataframe(importance_df, use_container_width=True, hide_index=True)
 
-st.caption("หมายเหตุ: การพยากรณ์นี้ใช้โมเดล Facebook Prophet ซึ่งสามารถจับ pattern และ seasonality ได้ดีกว่าโมเดลเชิงเส้น")
+# Footer
+st.markdown('<hr>', unsafe_allow_html=True)
+st.markdown("""
+<div class="glass-card" style="text-align: center; background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);">
+    <p style="margin: 0; color: #6c757d;">
+        <strong>📝 หมายเหตุ:</strong> การพยากรณ์นี้ใช้โมเดล Facebook Prophet ซึ่งสามารถจับ pattern และ seasonality ได้ดีกว่าโมเดลเชิงเส้น
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
 if selected_factors:
-    st.caption(f"โมเดลนี้รวมปัจจัยภายนอก {len(selected_factors)} ตัว เพื่อเพิ่มความแม่นยำ")
+    st.caption(f"🌍 โมเดลนี้รวมปัจจัยภายนอก {len(selected_factors)} ตัว เพื่อเพิ่มความแม่นยำ")
 
 # --- Sidebar Information ---
-st.sidebar.subheader("ข้อมูลโมเดล")
+st.sidebar.markdown('<h2 style="color: white;">📖 ข้อมูลโมเดล</h2>', unsafe_allow_html=True)
 st.sidebar.info("""
-**Facebook Prophet Features:**
+**🤖 Facebook Prophet Features:**
 - ตรวจจับ seasonality อัตโนมัติ
 - รองรับ holiday effects
 - มี confidence intervals
@@ -1246,7 +1816,7 @@ st.sidebar.info("""
 - รองรับ external regressors
 """)
 
-st.sidebar.subheader("🌍 ปัจจัยภายนอกที่รองรับ")
+st.sidebar.markdown('<h2 style="color: white;">🌍 ปัจจัยภายนอกที่รองรับ</h2>', unsafe_allow_html=True)
 st.sidebar.info("""
 **ปัจจัยที่สามารถเพิ่มได้:**
 
@@ -1268,7 +1838,7 @@ st.sidebar.info("""
 ✈️ **นักท่องเที่ยว** - การเคลื่อนย้ายคน
 """)
 
-st.sidebar.subheader("⚠️ Prophet Reserved Names")
+st.sidebar.markdown('<h2 style="color: white;">⚠️ Prophet Reserved Names</h2>', unsafe_allow_html=True)
 st.sidebar.warning("""
 **ชื่อที่โมเดล Prophet จองไว้ใช้เป็นตัวแปร:**
 
@@ -1285,7 +1855,7 @@ st.sidebar.warning("""
 - trend → trend_data
 """)
 
-st.sidebar.subheader("🔍 ความน่าเชื่อถือของโมเดล")
+st.sidebar.markdown('<h2 style="color: white;">🔍 ความน่าเชื่อถือของโมเดล</h2>', unsafe_allow_html=True)
 st.sidebar.warning("""
 **ข้อจำกัดสำคัญ:**
 
@@ -1302,27 +1872,27 @@ st.sidebar.warning("""
 - ระวังการ overfitting
 """)
 
-st.sidebar.subheader("📊 ข้อมูลสถิติ")
+st.sidebar.markdown('<h2 style="color: white;">📊 ข้อมูลสถิติ</h2>', unsafe_allow_html=True)
 st.sidebar.info("""
-**Metrics:**
+**📈 Metrics:**
 - **MAE**: ความผิดพลาดเฉลี่ย
 - **RMSE**: รากที่สองของความผิดพลาดกำลังสอง
 - **MAPE**: เปอร์เซ็นต์ความผิดพลาด  
 - **R²**: ค่าสัมประสิทธิ์การตัดสินใจ
 
-**เกณฑ์ประเมิน MAPE:**
+**🎯 เกณฑ์ประเมิน MAPE:**
 - < 10%: ดีมาก
 - 10-20%: ดี
 - > 20%: ต้องปรับปรุง
 
-**External Factors:**
+**🌍 External Factors:**
 - ปรับปรุงความแม่นยำได้ 30-50%
 - ต้องมีข้อมูลที่เชื่อถือได้
 - ควรมีเหตุผลเชิงสาเหตุ
 """)
 
 # แสดงข้อมูลแหล่งข้อมูลปัจจุบัน
-st.sidebar.subheader("📊 แหล่งข้อมูลปัจจุบัน")
+st.sidebar.markdown('<h2 style="color: white;">📊 แหล่งข้อมูลปัจจุบัน</h2>', unsafe_allow_html=True)
 st.sidebar.info(f"**ใช้ข้อมูลจาก:** {st.session_state.data_source}")
 
 if st.session_state.data_source == "Google Sheets":
@@ -1336,3 +1906,13 @@ if st.session_state.external_factors_enabled:
     st.sidebar.success(f"🌍 ใช้ปัจจัยภายนอก: {len(selected_factors)} ตัว")
 else:
     st.sidebar.info("📊 ใช้โมเดลพื้นฐาน (ไม่มีปัจจัยภายนอก)")
+
+# แสดงข้อมูลผู้พัฒนา
+st.sidebar.markdown('<hr style="border-color: rgba(255,255,255,0.3);">', unsafe_allow_html=True)
+st.sidebar.markdown("""
+<div style="text-align: center; color: rgba(255,255,255,0.8); font-size: 0.9rem;">
+    <p><strong>🚀 Developed with ❤️</strong></p>
+    <p>Powered by Facebook Prophet & Streamlit</p>
+    <p>Version 2.0 - Modern UI</p>
+</div>
+""", unsafe_allow_html=True)
