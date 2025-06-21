@@ -1,4 +1,12 @@
 import streamlit as st
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;700&display=swap');
+    html, body, [class*="css"]  {
+        font-family: 'Kanit', sans-serif !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 import pandas as pd
 from prophet import Prophet
 import plotly.graph_objects as go
@@ -957,7 +965,7 @@ fig.add_vline(
 )
 
 # ตั้งค่ากราฟ
-title = 'แนวโน้มผู้ป่วยและการพยากรณ์'
+title = 'แนวโน้มผู้ป่วยและการพยากรณ์ (Facebook Prophet'
 if selected_factors:
     title += f' + {len(selected_factors)} External Factors'
 title += ')'
@@ -973,7 +981,7 @@ fig.update_layout(
     hovermode='x unified',
     showlegend=True,
     height=600,
-    font=dict(family="Arial, sans-serif", size=12),
+    font=dict(family="kanit, sans-serif", size=12),
     plot_bgcolor='white'
 )
 
