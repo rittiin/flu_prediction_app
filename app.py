@@ -32,18 +32,19 @@ st.markdown("""
 
 /* Main App Container */
 .stApp {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 30%, #dee2e6 100%);
     min-height: 100vh;
 }
 
 .main .block-container {
     padding: 2rem;
     max-width: 1400px;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.98);
     border-radius: 20px;
     backdrop-filter: blur(10px);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
     margin: 1rem auto;
+    border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
 /* Typography */
@@ -57,7 +58,7 @@ label, .stMarkdown, .stText, .stTitle, .stHeader, .stSubheader {
 
 /* Headers */
 h1, .stTitle {
-    background: linear-gradient(45deg, #667eea, #764ba2);
+    background: linear-gradient(45deg, #2c3e50, #3498db);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -73,7 +74,7 @@ h2, .stHeader {
     font-size: 1.8rem !important;
     margin: 2rem 0 1rem 0 !important;
     padding-bottom: 0.5rem;
-    border-bottom: 3px solid #667eea;
+    border-bottom: 3px solid #3498db;
     position: relative;
 }
 
@@ -143,7 +144,7 @@ h3, .stSubheader {
 
 /* Buttons */
 .stButton > button {
-    background: linear-gradient(45deg, #667eea, #764ba2) !important;
+    background: linear-gradient(45deg, #3498db, #2980b9) !important;
     color: white !important;
     border: none !important;
     border-radius: var(--border-radius) !important;
@@ -151,15 +152,15 @@ h3, .stSubheader {
     font-weight: 600 !important;
     font-size: 1rem !important;
     transition: var(--transition) !important;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3) !important;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 .stButton > button:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4) !important;
-    background: linear-gradient(45deg, #5a6fd8, #6a4c93) !important;
+    box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4) !important;
+    background: linear-gradient(45deg, #2980b9, #1abc9c) !important;
 }
 
 .stButton > button:active {
@@ -212,7 +213,7 @@ h3, .stSubheader {
 
 /* Expander */
 .streamlit-expanderHeader {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
     color: white !important;
     border-radius: var(--border-radius) !important;
     padding: 1rem 1.5rem !important;
@@ -280,7 +281,7 @@ h3, .stSubheader {
 
 /* Sidebar */
 .css-1d391kg, .css-1aumxhk {
-    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%) !important;
+    background: linear-gradient(180deg, #34495e 0%, #2c3e50 100%) !important;
     padding: 2rem 1rem !important;
 }
 
@@ -291,12 +292,12 @@ h3, .stSubheader {
 .css-1d391kg h2, .css-1aumxhk h2,
 .css-1d391kg h3, .css-1aumxhk h3 {
     color: white !important;
-    border-bottom: 2px solid #667eea !important;
+    border-bottom: 2px solid #3498db !important;
     padding-bottom: 0.5rem !important;
 }
 
 .css-1d391kg .stAlert, .css-1aumxhk .stAlert {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.15) !important;
     backdrop-filter: blur(10px) !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
     color: white !important;
@@ -438,12 +439,12 @@ st.set_page_config(
 
 # --- 2. Header Section ที่สวยงาม ---
 st.markdown("""
-<div style="text-align: center; padding: 2rem 0;">
-    <h1 style="margin-bottom: 0.5rem;">🐳 การพยากรณ์อนุกรมเวลา</h1>
-    <h1 style="font-size: 1.8rem; margin-top: 0;">(Time Series Forecasting)</h1>
-    <p style="font-size: 1.2rem; color: #6c757d; margin-top: 1rem;">
+<div style="text-align: center; padding: 2rem 0; background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(46, 204, 113, 0.1)); border-radius: 15px; margin-bottom: 2rem;">
+    <h1 style="margin-bottom: 0.5rem; color: #2c3e50;">🐳 การพยากรณ์อนุกรมเวลา</h1>
+    <h1 style="font-size: 1.8rem; margin-top: 0; color: #34495e;">(Time Series Forecasting)</h1>
+    <p style="font-size: 1.2rem; color: #5d6d7e; margin-top: 1rem;">
         เครื่องมือ AI ที่ช่วยพยากรณ์จำนวนผู้ป่วย เช่น โรคไข้หวัดใหญ่ในสัปดาห์ข้างหน้า<br>
-        โดยใช้ <strong>Facebook Prophet</strong> และ <strong>External Factors</strong>
+        โดยใช้ <strong style="color: #2980b9;">Facebook Prophet</strong> และ <strong style="color: #27ae60;">External Factors</strong>
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -843,9 +844,9 @@ if st.session_state.current_data is not None:
     
     # แสดงสถานะข้อมูลในรูปแบบสวยงาม
     st.markdown(f"""
-    <div class="glass-card" style="background: linear-gradient(135deg, rgba(44, 160, 44, 0.1) 0%, rgba(44, 160, 44, 0.05) 100%);">
+    <div style="background: linear-gradient(135deg, rgba(46, 204, 113, 0.1) 0%, rgba(39, 174, 96, 0.05) 100%); padding: 1.5rem; border-radius: 12px; border-left: 4px solid #27ae60; margin: 1rem 0;">
         <div style="display: flex; align-items: center;">
-            <span class="status-indicator status-success"></span>
+            <span style="width: 12px; height: 12px; border-radius: 50%; background: #27ae60; display: inline-block; margin-right: 8px;"></span>
             <h4 style="margin: 0; color: #2c5530;">🔄 แหล่งข้อมูลปัจจุบัน: <strong>{st.session_state.data_source}</strong></h4>
         </div>
     </div>
