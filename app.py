@@ -1,11 +1,19 @@
 import streamlit as st
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;700&display=swap');
-    html, body, [class*="css"]  {
-        font-family: 'Kanit', sans-serif !important;
-    }
-    </style>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
+
+html, body, [class*="css"], [data-testid], .stApp, .main, 
+div, span, p, h1, h2, h3, h4, h5, h6, label, button, input {
+    font-family: 'Kanit', 'Sarabun', 'Prompt', sans-serif !important;
+    line-height: 1.6 !important;
+}
+
+/* สำหรับ Plotly charts */
+.plotly * {
+    font-family: 'Kanit', sans-serif !important;
+}
+</style>
 """, unsafe_allow_html=True)
 import pandas as pd
 from prophet import Prophet
