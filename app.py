@@ -1336,3 +1336,13 @@ if st.session_state.external_factors_enabled:
     st.sidebar.success(f"🌍 ใช้ปัจจัยภายนอก: {len(selected_factors)} ตัว")
 else:
     st.sidebar.info("📊 ใช้โมเดลพื้นฐาน (ไม่มีปัจจัยภายนอก)")
+    
+# Team info
+st.sidebar.markdown('<hr style="border-color: rgba(255,255,255,0.3);">', unsafe_allow_html=True)
+st.sidebar.markdown("""
+<div style="text-align: center; color: rgba(255,255,255,0.9); font-size: 0.9rem; line-height: 1.6;">
+    <p><strong>🏢 INCD Team DOE, DDC</strong></p>
+    <p style="font-size: 0.8rem; opacity: 0.8;">Department of Disease Control</p>
+    <p style="font-size: 0.8rem; opacity: 0.8;">Ministry of Public Health</p>
+</div>
+""", unsafe_allow_html=True)
