@@ -1,36 +1,43 @@
 import streamlit as st
 
+# โหลดฟอนต์ + แก้ไขไอคอน
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
-/* ฟอนต์หลักสำหรับข้อความ */
-html, body, [class*="css"]:not([class*="icon"]):not([class*="Icon"]), 
-[data-testid]:not([data-testid*="icon"]):not([data-testid*="Icon"]), 
-.stApp, .main, div, span, p, h1, h2, h3, h4, h5, h6, label, input {
-    font-family: 'Kanit', 'Sarabun', sans-serif !important;
+/* ใช้ฟอนต์ Kanit เฉพาะข้อความ ไม่รวมปุ่ม */
+div:not(button), span:not(button span), p, h1, h2, h3, h4, h5, h6, 
+label, .stMarkdown, .stText, .stTitle, .stHeader, .stSubheader {
+    font-family: 'Kanit', sans-serif !important;
     line-height: 1.6 !important;
 }
 
-/* บังคับให้ไอคอนใช้ฟอนต์เดิม */
-button, .material-icons, [class*="icon"], [class*="Icon"],
-.streamlit-expanderHeader, .css-1aumxhk button, .css-1d391kg button {
-    font-family: system-ui, -apple-system, sans-serif !important;
+/* ปล่อยให้ปุ่มและไอคอนใช้ฟอนต์เดิม */
+button, svg, .material-icons, [role="button"] {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
-/* แก้ไขเฉพาะข้อความ keyboard_double_arrow_right */
-*:contains("keyboard_double_arrow_right") {
+/* แก้ไขโดยตรงถ้าเจอข้อความ keyboard_double_arrow */
+[data-testid="collapsedControl"] {
     font-size: 0 !important;
 }
 
-*:contains("keyboard_double_arrow_right")::before {
+[data-testid="collapsedControl"]::after {
     content: "►" !important;
-    font-size: 14px !important;
+    font-size: 16px !important;
     font-family: monospace !important;
 }
 </style>
 """, unsafe_allow_html=True)
+
+import pandas as pd
+from prophet import Prophet
+import plotly.graph_objects as go
+import plotly.express as px
+import numpy as np
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import warnings
+warnings.filterwarnings('ignore')
 
 # --- 1. ตั้งค่าหน้าเว็บ ---
 st.set_page_config(
