@@ -1,28 +1,40 @@
 import streamlit as st
+
+st.set_page_config(
+    page_title="Time Series Forecasting",
+    page_icon="🖥️",
+    layout="wide"
+)
+
+# โหลดฟอนต์ + แก้ไขไอคอน
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
 
-html, body, [class*="css"], [data-testid], .stApp, .main, 
-div, span, p, h1, h2, h3, h4, h5, h6, label, button, input {
-    font-family: 'Kanit', 'Sarabun', 'Prompt', sans-serif !important;
+/* ใช้ฟอนต์ Kanit เฉพาะข้อความ ไม่รวมปุ่ม */
+div:not(button), span:not(button span), p, h1, h2, h3, h4, h5, h6, 
+label, .stMarkdown, .stText, .stTitle, .stHeader, .stSubheader {
+    font-family: 'Kanit', sans-serif !important;
     line-height: 1.6 !important;
 }
 
-/* สำหรับ Plotly charts */
-.plotly * {
-    font-family: 'Kanit', sans-serif !important;
+/* ปล่อยให้ปุ่มและไอคอนใช้ฟอนต์เดิม */
+button, svg, .material-icons, [role="button"] {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* แก้ไขโดยตรงถ้าเจอข้อความ keyboard_double_arrow */
+[data-testid="collapsedControl"] {
+    font-size: 0 !important;
+}
+
+[data-testid="collapsedControl"]::after {
+    content: "►" !important;
+    font-size: 16px !important;
+    font-family: monospace !important;
 }
 </style>
 """, unsafe_allow_html=True)
-import pandas as pd
-from prophet import Prophet
-import plotly.graph_objects as go
-import plotly.express as px
-import numpy as np
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import warnings
-warnings.filterwarnings('ignore')
 
 # --- 1. ตั้งค่าหน้าเว็บ ---
 st.set_page_config(
