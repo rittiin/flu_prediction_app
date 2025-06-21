@@ -957,7 +957,7 @@ fig.add_vline(
 )
 
 # ตั้งค่ากราฟ
-title = 'แนวโน้มผู้ป่วยไข้หวัดใหญ่และการพยากรณ์ (Facebook Prophet'
+title = 'แนวโน้มผู้ป่วยและการพยากรณ์'
 if selected_factors:
     title += f' + {len(selected_factors)} External Factors'
 title += ')'
@@ -1239,7 +1239,7 @@ st.sidebar.info("""
 
 st.sidebar.subheader("⚠️ Prophet Reserved Names")
 st.sidebar.warning("""
-**ชื่อที่ Prophet จองไว้:**
+**ชื่อที่โมเดล Prophet จองไว้ใช้เป็นตัวแปร:**
 
 ❌ **ห้ามใช้เป็นชื่อคอลัมน์:**
 - holidays (ใช้ holiday_flag แทน)
