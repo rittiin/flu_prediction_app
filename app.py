@@ -107,115 +107,89 @@ if data_source == "📊 Google Sheets (แนะนำ)":
         help="URL ต้องเป็นแบบ public (Anyone with link can view)"
     )
     
-if sheets_url:
-    try:
-        # ทำความสะอาด URL
-        sheets_url = sheets_url.strip()
-        
-        # แปลง Google Sheets URL เป็น CSV export URL
-        if "docs.google.com/spreadsheets" in sheets_url:
-            # วิธีการ extract sheet ID ที่ปรับปรุงแล้ว
-            if "/d/" in sheets_url:
-                # Extract sheet ID
-                if "/d/" in sheets_url and "/edit" in sheets_url:
-                    sheet_id = sheets_url.split("/d/")[1].split("/edit")[0]
-                elif "/d/" in sheets_url:
+    if sheets_url:
+        try:
+            # แปลง Google Sheets URL เป็น CSV export URL
+            if "docs.google.com/spreadsheets" in sheets_url:
+                # ดึง spreadsheet ID
+                if "/d/" in sheets_url:
                     sheet_id = sheets_url.split("/d/")[1].split("/")[0]
+                    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=0"
+                    
+                    with st.spinner("🔄 กำลังดาวน์โหลดข้อมูลจาก Google Sheets..."):
+                        # อ่านข้อมูลจาก Google Sheets
+                        df_sheets = pd.read_csv(csv_url)
+                        
+                        # ตรวจสอบคอลัมน์ที่จำเป็น
+                        required_columns = ['end_date', 'cases', 'week_num']
+                        missing_columns = [col for col in required_columns if col not in df_sheets.columns]
+                        
+                        if missing_columns:
+                            st.error(f"❌ Google Sheets ขาดคอลัมน์: {', '.join(missing_columns)}")
+                        else:
+                            # ทำความสะอาดข้อมูลพื้นฐาน
+                            df_sheets['end_date'] = pd.to_datetime(df_sheets['end_date'], format='%d/%m/%Y', errors='coerce')
+                            df_sheets['cases'] = pd.to_numeric(df_sheets['cases'], errors='coerce')
+                            df_sheets['week_num'] = pd.to_numeric(df_sheets['week_num'], errors='coerce')
+                            
+                            # ทำความสะอาดข้อมูลปัจจัยภายนอก (แก้ไขชื่อคอลัมน์)
+                            external_cols = ['temperature', 'humidity', 'holiday_flag', 'campaign', 'outbreak_index', 
+                                           'population_density', 'school_closed', 'tourists']
+                            
+                            # รองรับทั้ง 'holidays' และ 'holiday_flag' 
+                            if 'holidays' in df_sheets.columns and 'holiday_flag' not in df_sheets.columns:
+                                df_sheets['holiday_flag'] = df_sheets['holidays']
+                                df_sheets.drop('holidays', axis=1, inplace=True)
+                                st.info("ℹ️ แปลงคอลัมน์ 'holidays' เป็น 'holiday_flag' แล้ว")
+                            
+                            for col in external_cols:
+                                if col in df_sheets.columns:
+                                    df_sheets[col] = pd.to_numeric(df_sheets[col], errors='coerce')
+                            
+                            # ลบแถวที่มีข้อมูลหลักไม่ครบ
+                            df_sheets = df_sheets.dropna(subset=required_columns).reset_index(drop=True)
+                            
+                            if len(df_sheets) > 0:
+                                # เรียงข้อมูลตามวันที่
+                                df_sheets = df_sheets.sort_values('end_date').reset_index(drop=True)
+                                
+                                # ตรวจสอบว่ามี external factors หรือไม่
+                                has_external = any(col in df_sheets.columns for col in external_cols)
+                                
+                                # เก็บข้อมูลใน session state
+                                st.session_state.current_data = df_sheets
+                                st.session_state.data_source = "Google Sheets"
+                                st.session_state.external_factors_enabled = has_external
+                                
+                                st.success(f"✅ เชื่อมต่อ Google Sheets สำเร็จ! {len(df_sheets)} สัปดาห์")
+                                
+                                if has_external:
+                                    available_factors = [col for col in external_cols if col in df_sheets.columns]
+                                    st.info(f"🌍 พบปัจจัยภายนอก: {', '.join(available_factors)}")
+                                
+                                # แสดงข้อมูลพื้นฐาน
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("ช่วงเวลา", f"{df_sheets['end_date'].min().strftime('%d/%m/%Y')} - {df_sheets['end_date'].max().strftime('%d/%m/%Y')}")
+                                with col2:
+                                    st.metric("ผู้ป่วยเฉลี่ย", f"{df_sheets['cases'].mean():.1f}")
+                                with col3:
+                                    st.metric("จำนวนสัปดาห์", len(df_sheets))
+                                
+                                # ปุ่มรีเฟรชข้อมูล
+                                if st.button("🔄 รีเฟรชข้อมูลจาก Google Sheets"):
+                                    st.rerun()
+                                    
+                            else:
+                                st.error("❌ ไม่พบข้อมูลที่ถูกต้องใน Google Sheets")
                 else:
-                    st.error("❌ รูปแบบ URL ไม่ถูกต้อง")
-                    st.stop()
-                
-                # ลองหลายวิธีในการสร้าง CSV URL
-                csv_urls = [
-                    f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=0",
-                    f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv",
-                    f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid=0"
-                ]
-                
-                success = False
-                last_error = None
-                
-                for i, csv_url in enumerate(csv_urls):
-                    try:
-                        with st.spinner(f"🔄 กำลังลองวิธีที่ {i+1}..."):
-                            # เพิ่ม headers เพื่อหลีกเลี่ยง blocking
-                            import urllib.request
-                            req = urllib.request.Request(csv_url)
-                            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-                            
-                            # อ่านข้อมูลจาก Google Sheets
-                            df_sheets = pd.read_csv(csv_url)
-                            
-                            # ถ้าสำเร็จให้ break
-                            success = True
-                            break
-                            
-                    except Exception as e:
-                        last_error = str(e)
-                        continue
-                
-                if not success:
-                    st.error(f"❌ ไม่สามารถเชื่อมต่อ Google Sheets ได้: {last_error}")
-                    
-                    # แสดงวิธีแก้ไขที่เป็นไปได้
-                    with st.expander("💡 วิธีแก้ไขปัญหา"):
-                        st.markdown("""
-                        **1. ตรวจสอบการตั้งค่าสิทธิ์:**
-                        - คลิก "Share" ใน Google Sheets
-                        - เปลี่ยนเป็น "Anyone with the link"
-                        - ตั้งสิทธิ์เป็น "Viewer"
-                        
-                        **2. ตรวจสอบ URL:**
-                        - URL ต้องมี "/d/" และ sheet ID
-                        - ตัวอย่าง: `https://docs.google.com/spreadsheets/d/1ABC.../edit?usp=sharing`
-                        
-                        **3. ทดสอบ URL:**
-                        - เปิด URL ในหน้าต่างแบบ incognito
-                        - ต้องเข้าถึงได้โดยไม่ต้องเข้าสู่ระบบ
-                        
-                        **4. ลองดาวน์โหลด CSV โดยตรง:**
-                        - File → Download → Comma-separated values (.csv)
-                        - แล้วอัปโหลดผ่านแท็บ "📁 อัปโหลดไฟล์ CSV"
-                        """)
-                    st.stop()
-                
-                # ตรวจสอบคอลัมน์ที่จำเป็น
-                required_columns = ['end_date', 'cases', 'week_num']
-                missing_columns = [col for col in required_columns if col not in df_sheets.columns]
-                
-                if missing_columns:
-                    st.error(f"❌ Google Sheets ขาดคอลัมน์: {', '.join(missing_columns)}")
-                    
-                    # แสดงคอลัมน์ที่พบ
-                    st.write("**คอลัมน์ที่พบใน Google Sheets:**")
-                    st.write(", ".join(df_sheets.columns.tolist()))
-                    
-                    # แสดงตัวอย่างข้อมูล
-                    st.write("**ตัวอย่างข้อมูลใน Google Sheets:**")
-                    st.dataframe(df_sheets.head())
-                    st.stop()
-                else:
-                    # ดำเนินการต่อเหมือนเดิม...
-                    # (โค้ดส่วนที่เหลือคงเดิม)
-                    pass
-                    
+                    st.error("❌ URL ไม่ถูกต้อง กรุณาใช้ URL ของ Google Sheets")
             else:
-                st.error("❌ URL ไม่ถูกต้อง กรุณาใช้ URL ของ Google Sheets ที่มี '/d/' ")
-        else:
-            st.error("❌ กรุณาใส่ URL ของ Google Sheets")
-            
-    except Exception as e:
-        st.error(f"❌ เกิดข้อผิดพลาดที่ไม่คาดคิด: {str(e)}")
-        
-        # Debug information
-        with st.expander("🔍 ข้อมูล Debug"):
-            st.write(f"**URL ที่ใช้:** {sheets_url}")
-            st.write(f"**Error Type:** {type(e).__name__}")
-            st.write(f"**Error Details:** {str(e)}")
-            
-            if "sheet_id" in locals():
-                st.write(f"**Sheet ID ที่ extract ได้:** {sheet_id}")
-                st.write(f"**CSV URL ที่สร้าง:** {csv_url}")
+                st.error("❌ กรุณาใส่ URL ของ Google Sheets")
+                
+        except Exception as e:
+            st.error(f"❌ ไม่สามารถเชื่อมต่อ Google Sheets ได้: {str(e)}")
+            st.info("💡 **แนวทางแก้ไข:**\n- ตรวจสอบว่า URL ถูกต้อง\n- ตรวจสอบว่าแชร์เป็น 'Anyone with link'\n- ลองรีเฟรชหน้าเว็บ")
 
 # === วิธีที่ 2: อัปโหลดไฟล์ CSV ===
 elif data_source == "📁 อัปโหลดไฟล์ CSV":
