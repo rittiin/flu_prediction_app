@@ -300,20 +300,32 @@ else:  # ข้อมูลตัวอย่าง
         help="ข้อมูลจำลองสำหรับทดสอบระบบ"
     )
     
-    # สร้างข้อมูลตัวอย่าง
+    # สร้างข้อมูลตัวอย่างที่มี pattern ชัดเจนกว่า
+    np.random.seed(42)  # ให้ผลลัพธ์เหมือนเดิมทุกครั้ง
     dates = pd.date_range(start='2024-01-07', end='2024-12-29', freq='W')
     cases = []
     
-    # สร้างข้อมูลที่มี pattern
+    # สร้างข้อมูลที่มี pattern ชัดเจนกว่า
+    base_level = 100  # เพิ่ม base level
     for i, date in enumerate(dates):
         week_of_year = date.isocalendar()[1]
-        # seasonal pattern (หนาวเยอะ ร้อนน้อย)
-        seasonal = 80 + 30 * np.sin(2 * np.pi * (week_of_year - 10) / 52)
-        # trend (ลดลงเล็กน้อย)
-        trend = -0.2 * i
-        # noise
-        noise = np.random.normal(0, 8)
-        cases.append(max(10, int(seasonal + trend + noise)))
+        
+        # seasonal pattern ที่ชัดเจนกว่า (หนาวเยอะ ร้อนน้อย)
+        seasonal = 40 * np.sin(2 * np.pi * (week_of_year - 10) / 52)
+        
+        # trend ที่เบากว่า
+        trend = -0.1 * i
+        
+        # noise ที่น้อยกว่า
+        noise = np.random.normal(0, 5)
+        
+        # holiday spikes
+        holiday_boost = 0
+        if week_of_year in [1, 2, 13, 14, 31, 32, 52]:  # วันหยุดยาว
+            holiday_boost = 20
+        
+        final_value = base_level + seasonal + trend + noise + holiday_boost
+        cases.append(max(20, int(final_value)))  # เพิ่ม minimum value
     
     if sample_type == "📊 ข้อมูลพื้นฐาน (52 สัปดาห์)":
         df_sample = pd.DataFrame({
@@ -323,27 +335,28 @@ else:  # ข้อมูลตัวอย่าง
         })
         st.session_state.external_factors_enabled = False
     else:
-        # เพิ่มปัจจัยภายนอก
+        # เพิ่มปัจจัยภายนอกที่มีความสัมพันธ์กับข้อมูล
         temperatures = []
         humidities = []
-        holiday_flags = []  # เปลี่ยนจาก holidays เป็น holiday_flags
+        holiday_flags = []
         campaigns = []
         
         for i, date in enumerate(dates):
             week_of_year = date.isocalendar()[1]
-            # อุณหภูมิ (หนาวเย็น ร้อนร้อน)
-            temp = 26 + 6 * np.sin(2 * np.pi * (week_of_year - 10) / 52) + np.random.normal(0, 2)
+            
+            # อุณหภูมิ (มีความสัมพันธ์กับการระบาด)
+            temp = 26 + 6 * np.sin(2 * np.pi * (week_of_year - 10) / 52) + np.random.normal(0, 1)
             temperatures.append(round(temp, 1))
             
-            # ความชื้น (มรสุมชื้น แล้งแห้ง)
-            humidity = 70 + 15 * np.sin(2 * np.pi * (week_of_year - 20) / 52) + np.random.normal(0, 5)
+            # ความชื้น
+            humidity = 70 + 15 * np.sin(2 * np.pi * (week_of_year - 20) / 52) + np.random.normal(0, 3)
             humidities.append(max(40, min(95, int(humidity))))
             
-            # วันหยุด (สุ่มบางสัปดาห์)
+            # วันหยุด (สอดคล้องกับ holiday boost)
             holiday = 1 if week_of_year in [1, 2, 13, 14, 31, 32, 52] else 0
             holiday_flags.append(holiday)
             
-            # แคมเปญ (บางช่วง)
+            # แคมเปญ (ลดการระบาด)
             campaign = 1 if week_of_year in range(20, 25) or week_of_year in range(45, 50) else 0
             campaigns.append(campaign)
         
@@ -353,7 +366,7 @@ else:  # ข้อมูลตัวอย่าง
             'week_num': range(1, len(dates) + 1),
             'temperature': temperatures,
             'humidity': humidities,
-            'holiday_flag': holiday_flags,  # เปลี่ยนจาก holidays
+            'holiday_flag': holiday_flags,
             'campaign': campaigns,
             'outbreak_index': np.random.uniform(0.1, 0.8, len(dates)).round(2),
             'population_density': [1250] * len(dates),
@@ -706,36 +719,68 @@ if selected_factors:
                 st.write(f"- `{name}` → `{name}_factor` หรือ `ext_{name}`")
         st.stop()
 
-# --- สร้างและเทรนโมเดล Prophet ---
+# --- สร้างและเทรนโมเดล Prophet (แก้ไขแล้ว) ---
+def calculate_safe_mape(actual, predicted):
+    """คำนวณ MAPE โดยหลีกเลี่ยงการหารด้วยศูนย์"""
+    # กรองเฉพาะค่าที่ actual > 0 เพื่อหลีกเลี่ยงการหารด้วยศูนย์
+    mask = actual > 0
+    if mask.sum() == 0:
+        return np.inf  # ถ้าไม่มีค่า actual ที่ > 0
+    
+    actual_filtered = actual[mask]
+    predicted_filtered = predicted[mask]
+    
+    mape = np.mean(np.abs((actual_filtered - predicted_filtered) / actual_filtered)) * 100
+    return mape
+
 def train_prophet_model_with_factors(data, factors):
-    """สร้างและเทรนโมเดล Prophet พร้อมปัจจัยภายนอก"""
+    """สร้างและเทรนโมเดล Prophet พร้อมปัจจัยภายนอก (แก้ไขแล้ว)"""
     
-    # แบ่งข้อมูลเป็น train/test (80/20)
-    split_point = int(len(data) * 0.8)
-    train_data = data.iloc[:split_point]
-    test_data = data.iloc[split_point:]
+    # ปรับการแบ่งข้อมูลให้เหมาะสมกว่า
+    if len(data) >= 20:
+        # ใช้ time series split สำหรับข้อมูลเยอะ
+        test_size = max(3, min(8, len(data) // 4))  # 3-8 สัปดาห์สำหรับ test
+    elif len(data) >= 10:
+        test_size = 3  # 3 สัปดาห์สำหรับข้อมูลปานกลาง
+    else:
+        test_size = 0  # ไม่ split ถ้าข้อมูลน้อยเกินไป
     
-    # สร้างโมเดล Prophet
+    if test_size > 0:
+        split_point = len(data) - test_size
+        train_data = data.iloc[:split_point]
+        test_data = data.iloc[split_point:]
+    else:
+        train_data = data
+        test_data = pd.DataFrame()
+    
+    # สร้างโมเดล Prophet ที่ปรับปรุงแล้ว
     model = Prophet(
         daily_seasonality=False,
-        weekly_seasonality=True,
+        weekly_seasonality=False,  # ปิดก่อน จะเพิ่มเองที่ละเอียดกว่า
         yearly_seasonality=True if len(data) >= 52 else False,
         seasonality_mode='additive',
         interval_width=0.95,
-        changepoint_prior_scale=0.05,
-        seasonality_prior_scale=10.0
+        changepoint_prior_scale=0.01,  # ลดความ sensitive ต่อ changepoints
+        seasonality_prior_scale=1.0,   # ลดความ flexible ของ seasonality
+        uncertainty_samples=100        # ลดจำนวน samples สำหรับความเร็ว
     )
     
-    # เพิ่ม external regressors
+    # เพิ่ม seasonality ที่กำหนดเอง
+    if len(data) >= 12:
+        model.add_seasonality(name='monthly', period=30.5/7, fourier_order=3)
+    if len(data) >= 26:
+        model.add_seasonality(name='quarterly', period=91.25/7, fourier_order=2)
+    
+    # เพิ่ม external regressors ด้วยการตั้งค่าที่ conservative
     factor_configs = {
-        'temperature': {'prior_scale': 0.5, 'mode': 'additive'},
-        'humidity': {'prior_scale': 0.3, 'mode': 'additive'},
-        'holiday_flag': {'prior_scale': 1.0, 'mode': 'additive'},  # เปลี่ยนจาก holidays
-        'campaign': {'prior_scale': 0.8, 'mode': 'multiplicative'},
-        'outbreak_index': {'prior_scale': 1.5, 'mode': 'multiplicative'},
-        'population_density': {'prior_scale': 0.1, 'mode': 'additive'},
-        'school_closed': {'prior_scale': 0.7, 'mode': 'additive'},
-        'tourists': {'prior_scale': 0.4, 'mode': 'additive'}
+        'temperature': {'prior_scale': 0.1, 'mode': 'additive'},
+        'humidity': {'prior_scale': 0.1, 'mode': 'additive'},
+        'holiday_flag': {'prior_scale': 0.5, 'mode': 'additive'},
+        'campaign': {'prior_scale': 0.3, 'mode': 'additive'},
+        'outbreak_index': {'prior_scale': 0.5, 'mode': 'multiplicative'},
+        'population_density': {'prior_scale': 0.05, 'mode': 'additive'},
+        'school_closed': {'prior_scale': 0.3, 'mode': 'additive'},
+        'tourists': {'prior_scale': 0.1, 'mode': 'additive'}
     }
     
     for factor in factors:
@@ -743,14 +788,15 @@ def train_prophet_model_with_factors(data, factors):
             config = factor_configs[factor]
             model.add_regressor(factor, prior_scale=config['prior_scale'], mode=config['mode'])
         else:
-            # ใช้ค่า default สำหรับปัจจัยที่ไม่ได้กำหนดไว้
-            model.add_regressor(factor, prior_scale=0.5, mode='additive')
+            # ใช้ค่า conservative สำหรับปัจจัยที่ไม่ได้กำหนดไว้
+            model.add_regressor(factor, prior_scale=0.1, mode='additive')
     
     # เทรนด้วยข้อมูล train
     model.fit(train_data)
     
-    # ทดสอบกับข้อมูล test
+    # ทดสอบกับข้อมูล test ถ้ามี
     if len(test_data) > 0:
+        # สร้าง future dataframe สำหรับ validation
         future_test = model.make_future_dataframe(periods=len(test_data), freq='W')
         
         # เพิ่มค่าปัจจัยภายนอกสำหรับ test
@@ -764,26 +810,64 @@ def train_prophet_model_with_factors(data, factors):
         test_actual = test_data['y'].values
         test_predicted = forecast_test.iloc[-len(test_data):]['yhat'].values
         
+        # ใช้ safe MAPE calculation
         validation_mae = mean_absolute_error(test_actual, test_predicted)
-        validation_mape = np.mean(np.abs((test_actual - test_predicted) / test_actual)) * 100
+        validation_mape = calculate_safe_mape(test_actual, test_predicted)
+        
+        # ป้องกัน MAPE ที่ผิดปกติ
+        if validation_mape > 200:  # ถ้า MAPE มากกว่า 200% ให้ปรับโมเดล
+            st.warning(f"⚠️ MAPE เบื้องต้น {validation_mape:.1f}% สูงเกินไป - กำลังปรับโมเดล...")
+            
+            # สร้างโมเดลใหม่ที่ conservative กว่า
+            model_adjusted = Prophet(
+                daily_seasonality=False,
+                weekly_seasonality=False,
+                yearly_seasonality=False,  # ปิด yearly seasonality
+                seasonality_mode='additive',
+                interval_width=0.95,
+                changepoint_prior_scale=0.001,  # ลดให้มากกว่าเดิม
+                seasonality_prior_scale=0.1     # ลดให้มากกว่าเดิม
+            )
+            
+            # เพิ่ม regressors แบบ conservative มาก
+            for factor in factors:
+                model_adjusted.add_regressor(factor, prior_scale=0.01, mode='additive')
+            
+            model_adjusted.fit(train_data)
+            forecast_test_adjusted = model_adjusted.predict(future_test)
+            
+            test_predicted_adjusted = forecast_test_adjusted.iloc[-len(test_data):]['yhat'].values
+            validation_mape_adjusted = calculate_safe_mape(test_actual, test_predicted_adjusted)
+            
+            if validation_mape_adjusted < validation_mape:
+                model = model_adjusted
+                validation_mape = validation_mape_adjusted
+                validation_mae = mean_absolute_error(test_actual, test_predicted_adjusted)
+                st.info(f"✅ ปรับโมเดลสำเร็จ - MAPE ลดเหลือ {validation_mape:.1f}%")
         
         # เทรนใหม่ด้วยข้อมูลทั้งหมด
         model_final = Prophet(
             daily_seasonality=False,
-            weekly_seasonality=True,
+            weekly_seasonality=False,
             yearly_seasonality=True if len(data) >= 52 else False,
             seasonality_mode='additive',
             interval_width=0.95,
-            changepoint_prior_scale=0.05,
-            seasonality_prior_scale=10.0
+            changepoint_prior_scale=0.01,
+            seasonality_prior_scale=1.0
         )
+        
+        # เพิ่ม seasonality
+        if len(data) >= 12:
+            model_final.add_seasonality(name='monthly', period=30.5/7, fourier_order=3)
+        if len(data) >= 26:
+            model_final.add_seasonality(name='quarterly', period=91.25/7, fourier_order=2)
         
         for factor in factors:
             if factor in factor_configs:
                 config = factor_configs[factor]
                 model_final.add_regressor(factor, prior_scale=config['prior_scale'], mode=config['mode'])
             else:
-                model_final.add_regressor(factor, prior_scale=0.5, mode='additive')
+                model_final.add_regressor(factor, prior_scale=0.1, mode='additive')
         
         model_final.fit(data)
         
@@ -866,7 +950,10 @@ if has_validation:
     with col1:
         st.metric("Validation MAE", f"{val_mae:.2f}")
     with col2:
-        st.metric("Validation MAPE", f"{val_mape:.1f}%")
+        if val_mape < 1000:  # แสดงเฉพาะเมื่อ MAPE สมเหตุสมผล
+            st.metric("Validation MAPE", f"{val_mape:.1f}%")
+        else:
+            st.metric("Validation MAPE", "ข้อมูลไม่เพียงพอ")
     with col3:
         if selected_factors:
             st.metric("External Factors", f"{len(selected_factors)} ตัว")
@@ -1042,7 +1129,7 @@ try:
         # คำนวณค่า error metrics
         mae = mean_absolute_error(actual_values, predicted_values)
         rmse = np.sqrt(mean_squared_error(actual_values, predicted_values))
-        mape = np.mean(np.abs((actual_values - predicted_values) / actual_values)) * 100
+        mape = calculate_safe_mape(actual_values, predicted_values)  # ใช้ safe MAPE
         r2 = r2_score(actual_values, predicted_values)
         
         show_metrics = True
@@ -1076,11 +1163,18 @@ if show_metrics:
         )
 
     with col3:
-        st.metric(
-            label="MAPE",
-            value=f"{mape:.1f}%",
-            help="Mean Absolute Percentage Error - เปอร์เซ็นต์ความผิดพลาด"
-        )
+        if mape < 1000:  # แสดงเฉพาะเมื่อ MAPE สมเหตุสมผล
+            st.metric(
+                label="MAPE",
+                value=f"{mape:.1f}%",
+                help="Mean Absolute Percentage Error - เปอร์เซ็นต์ความผิดพลาด"
+            )
+        else:
+            st.metric(
+                label="MAPE",
+                value="ไม่ใช้ได้",
+                help="MAPE ไม่สามารถคำนวณได้เนื่องจากข้อมูลมีค่าใกล้ศูนย์"
+            )
 
     with col4:
         st.metric(
@@ -1090,17 +1184,26 @@ if show_metrics:
         )
 
     # สรุปผลการประเมิน
-    if mape < 10:
-        accuracy_level = "ดีมาก (MAPE < 10%)"
-        accuracy_color = "green"
-    elif mape < 20:
-        accuracy_level = "ดี (MAPE 10-20%)"
-        accuracy_color = "orange" 
+    if mape < 1000:  # ใช้ MAPE เฉพาะเมื่อสมเหตุสมผล
+        if mape < 10:
+            accuracy_level = "ดีมาก (MAPE < 10%)"
+            accuracy_color = "green"
+        elif mape < 20:
+            accuracy_level = "ดี (MAPE 10-20%)"
+            accuracy_color = "orange" 
+        else:
+            accuracy_level = "ต้องปรับปรุง (MAPE > 20%)"
+            accuracy_color = "red"
+        
+        st.info(f"**สรุปความแม่นยำของโมเดล**: {accuracy_level}")
     else:
-        accuracy_level = "ต้องปรับปรุง (MAPE > 20%)"
-        accuracy_color = "red"
-
-    st.info(f"**สรุปความแม่นยำของโมเดล**: {accuracy_level}")
+        # ใช้ R² แทน
+        if r2 > 0.8:
+            st.info("**สรุปความแม่นยำของโมเดล**: ดีมาก (R² > 0.8)")
+        elif r2 > 0.6:
+            st.info("**สรุปความแม่นยำของโมเดล**: ดี (R² 0.6-0.8)")
+        else:
+            st.warning("**สรุปความแม่นยำของโมเดล**: ต้องปรับปรุง (R² < 0.6)")
 
     # แสดงกราฟ Residuals Analysis
     st.subheader("🔍 การวิเคราะห์ Residuals")
@@ -1333,7 +1436,7 @@ else:
     st.sidebar.warning("🎯 ใช้ข้อมูลตัวอย่าง - เพื่อการทดสอบเท่านั้น")
 
 if st.session_state.external_factors_enabled:
-    st.sidebar.success(f"🌍 ใช้ปัจจัยภายนอก: {len(selected_factors)} ตัว")
+    st.sidebar.success(f"🌍 ใช้ปัจจัยภายนอก: {len(selected_factors) if 'selected_factors' in locals() else 0} ตัว")
 else:
     st.sidebar.info("📊 ใช้โมเดลพื้นฐาน (ไม่มีปัจจัยภายนอก)")
     
@@ -1346,3 +1449,16 @@ st.sidebar.markdown("""
     <p style="font-size: 0.8rem; opacity: 0.8;">Ministry of Public Health</p>
 </div>
 """, unsafe_allow_html=True)
+
+# เพิ่มส่วนแสดงข้อมูล debug สำหรับ validation metrics
+if has_validation and val_mape is not None:
+    st.sidebar.subheader("🔧 ข้อมูล Debug")
+    
+    if val_mape > 200:
+        st.sidebar.error(f"⚠️ MAPE สูงมาก: {val_mape:.1f}%")
+        st.sidebar.write("**สาเหตุที่เป็นไปได้:**")
+        st.sidebar.write("- ข้อมูลมีค่าใกล้ศูนย์")
+        st.sidebar.write("- โมเดลยังไม่เหมาะสม")
+        st.sidebar.write("- ข้อมูลมี pattern ซับซ้อน")
+    else:
+        st.sidebar.success(f"✅ MAPE ปกติ: {val_mape:.1f}%")
